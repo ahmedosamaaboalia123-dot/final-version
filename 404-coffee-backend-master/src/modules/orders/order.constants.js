@@ -1,0 +1,189 @@
+// ============================================================
+// Orders Module — Constants
+// All allowed values, error codes, and status transitions
+// ============================================================
+
+const ORDER_CHANNELS = Object.freeze({
+    CUSTOMER_WEB: "CUSTOMER_WEB",
+    TABLE_CUSTOMER: "TABLE_CUSTOMER",
+    TABLE_WAITER: "TABLE_WAITER",
+    ADMIN_POS: "ADMIN_POS",
+});
+
+const FULFILLMENT_TYPES = Object.freeze({
+    PICKUP: "PICKUP",
+    DELIVERY: "DELIVERY",
+    DINE_IN: "DINE_IN",
+});
+
+const ORDER_STATUSES = Object.freeze({
+    PENDING: "PENDING",
+    CONFIRMED: "CONFIRMED",
+    PREPARING: "PREPARING",
+    READY: "READY",
+    ASSIGNED_TO_DELEGATE: "ASSIGNED_TO_DELEGATE",
+    OUT_FOR_DELIVERY: "OUT_FOR_DELIVERY",
+    DELIVERED: "DELIVERED",
+    COMPLETED: "COMPLETED",
+    CANCELLED: "CANCELLED",
+});
+
+const ORDER_ITEM_STATUSES = Object.freeze({
+    PENDING: "PENDING",
+    PREPARING: "PREPARING",
+    READY: "READY",
+    CANCELLED: "CANCELLED",
+});
+
+const PAYMENT_METHODS = Object.freeze({
+    CASH: "CASH",
+    CARD: "CARD",
+    WALLET: "WALLET",
+});
+
+const PAYMENT_STATUSES = Object.freeze({
+    PENDING: "PENDING",
+    PAID: "PAID",
+    PARTIALLY_PAID: "PARTIALLY_PAID",
+    REFUNDED: "REFUNDED",
+    CANCELLED: "CANCELLED",
+});
+
+const ORDER_TYPES = Object.freeze({
+    tables: "tables",
+    online: "online",
+});
+
+const SERVICE_REQUEST_TYPES = Object.freeze({
+    WAITER: "WAITER",
+    BILL: "BILL",
+    WATER: "WATER",
+    UTENSILS: "UTENSILS",
+    CLEANING: "CLEANING",
+});
+
+// ============================================================
+// Status transitions — per spec section 28
+// ============================================================
+
+const VALID_ORDER_TRANSITIONS = Object.freeze({
+    PENDING: ["CONFIRMED", "CANCELLED"],
+    CONFIRMED: ["PREPARING", "CANCELLED"],
+    PREPARING: ["READY", "CANCELLED"],
+    READY: ["COMPLETED", "ASSIGNED_TO_DELEGATE", "CANCELLED"],
+    ASSIGNED_TO_DELEGATE: ["OUT_FOR_DELIVERY", "CANCELLED"],
+    OUT_FOR_DELIVERY: ["DELIVERED", "CANCELLED"],
+    DELIVERED: ["COMPLETED", "CANCELLED"],
+    COMPLETED: [],
+    CANCELLED: [],
+});
+
+const VALID_ITEM_TRANSITIONS = Object.freeze({
+    PENDING: ["PREPARING", "CANCELLED"],
+    PREPARING: ["READY", "CANCELLED"],
+    READY: ["PREPARING"],
+    CANCELLED: [],
+});
+
+// ============================================================
+// Error codes — per spec section 2 + error examples
+// ============================================================
+
+const ERROR_CODES = Object.freeze({
+    // Generic
+    INVALID_STATUS_TRANSITION: "INVALID_STATUS_TRANSITION",
+    INVALID_ORDER_TYPE: "INVALID_ORDER_TYPE",
+    INVALID_PAYMENT_METHOD: "INVALID_PAYMENT_METHOD",
+    INVALID_FULFILLMENT_TYPE: "INVALID_FULFILLMENT_TYPE",
+    INVALID_CHANNEL: "INVALID_CHANNEL",
+    INVALID_ORDER_STATUS: "INVALID_ORDER_STATUS",
+    INVALID_ITEM_STATUS: "INVALID_ITEM_STATUS",
+
+    // Products
+    PRODUCT_NOT_FOUND: "PRODUCT_NOT_FOUND",
+    PRODUCT_NOT_AVAILABLE: "PRODUCT_NOT_AVAILABLE",
+    SIZE_NOT_AVAILABLE: "SIZE_NOT_AVAILABLE",
+    SIZE_NOT_FOUND: "SIZE_NOT_FOUND",
+    ADDON_NOT_AVAILABLE: "ADDON_NOT_AVAILABLE",
+    ADDON_NOT_FOUND: "ADDON_NOT_FOUND",
+
+    // Order
+    ORDER_NOT_FOUND: "ORDER_NOT_FOUND",
+    ORDER_ITEM_NOT_FOUND: "ORDER_ITEM_NOT_FOUND",
+    ORDER_IS_COMPLETED: "ORDER_IS_COMPLETED",
+    ORDER_IS_CANCELLED: "ORDER_IS_CANCELLED",
+    CANNOT_DELETE_COMPLETED: "CANNOT_DELETE_COMPLETED",
+    CANNOT_CANCEL_COMPLETED: "CANNOT_CANCEL_COMPLETED",
+    CANNOT_CANCEL_ALREADY_CANCELLED: "CANNOT_CANCEL_ALREADY_CANCELLED",
+    CANNOT_DELETE_ACTIVE: "CANNOT_DELETE_ACTIVE",
+    EMPTY_ORDER: "EMPTY_ORDER",
+
+    // Table
+    TABLE_REQUIRED: "TABLE_REQUIRED",
+    TABLE_NOT_FOUND: "TABLE_NOT_FOUND",
+    NO_ACTIVE_TABLE_ORDER: "NO_ACTIVE_TABLE_ORDER",
+    TABLE_HAS_PENDING_ORDERS: "TABLE_HAS_PENDING_ORDERS",
+
+    // Customer
+    CUSTOMER_NOT_FOUND: "CUSTOMER_NOT_FOUND",
+    CUSTOMER_NAME_OR_ID_REQUIRED: "CUSTOMER_NAME_OR_ID_REQUIRED",
+    INVALID_PHONE: "INVALID_PHONE",
+
+    // Delegate
+    DELEGATE_NOT_FOUND: "DELEGATE_NOT_FOUND",
+    DELEGATE_NOT_AVAILABLE: "DELEGATE_NOT_AVAILABLE",
+    ORDER_NOT_DELIVERY: "ORDER_NOT_DELIVERY",
+    ORDER_MUST_BE_READY: "ORDER_MUST_BE_READY",
+
+    // Delivery
+    DELIVERY_ADDRESS_REQUIRED: "DELIVERY_ADDRESS_REQUIRED",
+    ORDER_MUST_BE_READY_FOR_DELIVERY: "ORDER_MUST_BE_READY_FOR_DELIVERY",
+
+    // Idempotency
+    IDEMPOTENCY_KEY_REUSED: "IDEMPOTENCY_KEY_REUSED",
+
+    // Inventory
+    INSUFFICIENT_INVENTORY: "INSUFFICIENT_INVENTORY",
+
+    // Pricing
+    DISCOUNT_CANNOT_BE_NEGATIVE: "DISCOUNT_CANNOT_BE_NEGATIVE",
+    DISCOUNT_EXCEEDS_SUBTOTAL: "DISCOUNT_EXCEEDS_SUBTOTAL",
+
+    // Rate limiting
+    TOO_MANY_REQUESTS: "TOO_MANY_REQUESTS",
+
+    // Checkout
+    TABLE_NOT_OPEN: "TABLE_NOT_OPEN",
+    CHECKOUT_FAILED: "CHECKOUT_FAILED",
+});
+
+// ============================================================
+// Status text mapping (Arabic) for tracking
+// ============================================================
+
+const STATUS_TEXT = Object.freeze({
+    PENDING: "تم استلام الطلب",
+    CONFIRMED: "تم تأكيد الطلب",
+    PREPARING: "جاري تحضير طلبك",
+    READY: "طلبك جاهز",
+    ASSIGNED_TO_DELEGATE: "تم تسليم الطلب للمندوب",
+    OUT_FOR_DELIVERY: "المندوب في الطريق",
+    DELIVERED: "تم التسليم",
+    COMPLETED: "تم الإغلاق",
+    CANCELLED: "تم الإلغاء",
+});
+
+module.exports = {
+    ORDER_CHANNELS,
+    FULFILLMENT_TYPES,
+    ORDER_STATUSES,
+    ORDER_ITEM_STATUSES,
+    PAYMENT_METHODS,
+    PAYMENT_STATUSES,
+    ORDER_TYPES,
+    SERVICE_REQUEST_TYPES,
+    VALID_ORDER_TRANSITIONS,
+    VALID_ITEM_TRANSITIONS,
+    ERROR_CODES,
+    STATUS_TEXT,
+};
