@@ -1,0 +1,790 @@
+[
+  {
+    "method": "GET",
+    "path": "/api/v1/"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/admin/bootstrap"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/attendance"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/attendance/:id"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/attendance/:id/adjustments"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/attendance/:id/check-out"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/attendance/:id/force-close"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/attendance/check-in"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/audit-events-screen"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/audit-events/:id"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/audit-events/exports"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/audit-events/exports/:id"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/auth/login"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/auth/logout"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/auth/refresh"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/cash-drawer-screen"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/cash-drawer-shifts"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/cash-drawer-shifts"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/cash-drawer-shifts/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/cash-drawer-shifts/:id/alerts"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/cash-drawer-shifts/:id/cash-in"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/cash-drawer-shifts/:id/cash-out"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/cash-drawer-shifts/:id/close"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/cash-drawer-shifts/:id/print-data"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/cash-drawer-shifts/:id/transactions"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/cash-drawer-transactions/:id/reverse"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/cash-refunds/:id/complete"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/cash-refunds/:id/retry"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/cash-refunds/sweep"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/catalog"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/customer-access-sessions"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/customer-ai/chat"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/customer/orders"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/customers"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/customers-screen"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/customers/:id"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/customers/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/dashboard-screen"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/delegates"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/delegates-screen"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/delegates/:id"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/delegates/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/delivery-assignments/:id"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/delivery-assignments/:id/admin-confirm-delivery"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/delivery-assignments/:id/failed"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/delivery-assignments/:id/handover"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/delivery-assignments/:id/reassign"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/delivery-assignments/:id/returned"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/delivery-assignments/:id/settle-cash"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/delivery-assignments/:id/whatsapp-share-opened"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/employee-devices"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/employee-devices/:id/approve"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/employee-devices/:id/block"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/employee-devices/:id/revoke"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/employees"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/employees-screen"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/employees/:id"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/employees/:id"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/v1/employees/:id/permission-matrix"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/entities/:entityType/:entityId/timeline"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/financial-reports-screen"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/financial-reports/delegates"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/financial-reports/drawer"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/financial-reports/exports"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/financial-reports/exports/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/financial-reports/inventory"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/financial-reports/sales"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/financial-reports/suppliers"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/invoices"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/invoices/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/invoices/:id/print-data"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/invoices/:id/print-events"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/measurement-units"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/media"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/v1/media/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/media/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/media/:id/content"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/media/uploads"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/notifications"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/notifications/:id/read"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/notifications/read-all"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/order-cancellation-requests"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/order-cancellation-requests/:id"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/order-cancellation-requests/:id/approve"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/order-cancellation-requests/:id/reject"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/order-history-screen"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/order-payments/:id/refunds"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/order-payments/:id/settle"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/orders"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/orders-online-screen"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/orders/:id"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/orders/:id/assign-delegate"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/orders/:id/cancel"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/orders/:id/complete-takeaway"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/orders/:id/invoice-finalize"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/orders/:id/invoice-preview"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/orders/:id/items"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/orders/:id/items/:itemId/cancel"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/orders/:id/payments"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/orders/:id/payments"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/orders/:id/print-data"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/orders/:id/reviews"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/orders/:id/reviews"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/permissions"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/preparation-screen"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/preparation/order-items/:itemId/ready"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/preparation/orders"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/preparation/orders/:id"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/product-addons/:id"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/product-categories"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/product-categories/:id"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/v1/product-sizes/:id/recipe"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/products"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/products-screen"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/products/:id"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/products/:id"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/products/:id/addons"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/products/:id/sizes"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/products/:id/types"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/public-orders"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/public-orders/:orderNumber/cancellation-request"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/public-orders/:orderNumber/items"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/public-orders/:orderNumber/receive"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/public-orders/:orderNumber/reviews"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/public-orders/:orderNumber/tracking"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/public-orders/lookup"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/purchase-groups"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/v1/purchase-groups/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/purchase-groups/:id"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/purchase-groups/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/purchase-groups/:id/print-data"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/purchase-groups/:id/register-many"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/purchase-groups/:id/split-by-supplier"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/purchase-items/:id/register"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/purchase-returns"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/purchase-returns-screen"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/purchase-returns/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/purchase-returns/:id/print-data"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/purchases-screen"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/raw-materials"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/raw-materials-screen"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/v1/raw-materials/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/raw-materials/:id"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/raw-materials/:id"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/v1/raw-materials/:id/batch-priorities"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/raw-materials/:id/withdrawals"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/realtime/sync"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/reviews"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/reviews/:id"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/reviews/:id/moderation"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/roles"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/roles"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/roles/:id"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/v1/roles/:id/permissions"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/v1/supplier-account-entries/:id"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/supplier-account-entries/:id"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/supplier-account-entries/:id/reverse"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/supplier-purchase-invoices/:id/print-data"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/suppliers"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/suppliers-screen"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/v1/suppliers/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/suppliers/:id"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/suppliers/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/suppliers/:id/account-entries"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/suppliers/:id/account-entries"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/table-experience/bootstrap"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/table-experience/order-proposals"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/table-experience/order-proposals/cancel"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/table-experience/order-proposals/current"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/table-experience/orders/:id/reviews"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/table-experience/services"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/table-experience/services/:id/cancel"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/table-order-proposals"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/table-order-proposals/:id"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/table-order-proposals/:id/confirm"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/table-order-proposals/:id/reject"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/table-order-proposals/:id/request-changes"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/table-order-proposals/:id/start-review"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/table-service-requests/:id"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/table-service-requests/:id/resolve"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/table-services-screen"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/table-sessions/:id"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/table-sessions/:id/cancel"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/table-sessions/:id/close"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/table-sessions/:id/items"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/table-sessions/:id/print-data"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/tables-board"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/tables/:id"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/tables/:id"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/tables/:id/admin-orders"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/tables/:id/rotate-qr"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/warnings-screen"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/warnings/summary"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/withdrawals"
+  },
+  {
+    "method": "GET",
+    "path": "/health/live"
+  },
+  {
+    "method": "GET",
+    "path": "/health/ready"
+  },
+  {
+    "method": "GET",
+    "path": "/system/version"
+  }
+]

@@ -1,0 +1,1824 @@
+{
+  "schemaVersion": 1,
+  "project": "404-coffee-backend-v2",
+  "sourceDocuments": [
+    "../backend-design/final-2/01-complete-erd-and-mongodb-schemas.md",
+    "../backend-design/final-2/02-api-doc.md",
+    "../backend-design/final-2/03-complete-modular-project-structure.md",
+    "../backend-design/final-2/04-detailed-implementation-plan.md",
+    "../backend-design/final-2/05-canonical-execution-blueprint.md",
+    "../backend-design/final-2/06-codex-execution-plan.md"
+  ],
+  "invariants": {
+    "apiBasePath": "/api/v1",
+    "paymentMethods": ["CASH"],
+    "cashCollectionModes": ["DIRECT", "COD"],
+    "defaultPageLimit": 10,
+    "interactiveP95Ms": 500,
+    "interactiveP99Ms": 1000,
+    "database": "MongoDB Replica Set",
+    "architecture": "Modular Monolith"
+  },
+  "phases": [
+    {
+      "id": "BATCH-00",
+      "name": "Environment and workspace baseline",
+      "status": "VERIFIED",
+      "requirements": ["ENV-01", "ENV-02", "ENV-03", "ENV-04"],
+      "operations": [],
+      "routes": [],
+      "functions": [],
+      "tests": [
+        "Node and npm versions recorded",
+        "Mongo and Docker availability recorded",
+        "Git baseline recorded",
+        "Frontend API surface reviewed",
+        "Independent target directory created"
+      ]
+    },
+    {
+      "id": "BATCH-01",
+      "name": "Runnable scaffold",
+      "status": "VERIFIED",
+      "requirements": ["BOOT-01", "BOOT-02", "HEALTH-01"],
+      "operations": ["OPS-SCAFFOLD", "OPS-BOOTSTRAP", "OPS-HEALTH"],
+      "routes": ["GET /health/live", "GET /health/ready", "GET /system/version"],
+      "functions": ["createApp", "bootstrap", "shutdown", "loadEnv", "loadBusinessConfig"],
+      "tests": [
+        "app factory",
+        "liveness",
+        "readiness success and dependency failure",
+        "version and not-found contracts",
+        "typed configuration and secret redaction",
+        "graceful shutdown"
+      ],
+      "evidence": {
+        "lint": "passed",
+        "testFiles": 2,
+        "testsPassed": 7,
+        "formatCheck": "passed"
+      }
+    },
+    {
+      "id": "BATCH-02",
+      "name": "Platform primitives and shared contracts",
+      "status": "VERIFIED",
+      "requirements": [
+        "PLATFORM-HTTP",
+        "PLATFORM-DECIMAL",
+        "PLATFORM-TX",
+        "PLATFORM-IDEMPOTENCY",
+        "PLATFORM-AUDIT",
+        "PLATFORM-OUTBOX",
+        "PLATFORM-AUTH-CONTEXT"
+      ],
+      "operations": [
+        "OPS-VALIDATE",
+        "OPS-PAGINATE",
+        "OPS-TRANSACTION",
+        "OPS-IDEMPOTENCY",
+        "OPS-AUDIT-WRITE",
+        "OPS-OUTBOX-WRITE",
+        "OPS-OUTBOX-PUBLISH"
+      ],
+      "routes": [],
+      "functions": [
+        "ApiError",
+        "validate",
+        "parsePage",
+        "decimal",
+        "runInTransaction",
+        "beginOperation",
+        "writeAudit",
+        "enqueueDomainEvent",
+        "claimOutboxBatch",
+        "createEmployeeContext"
+      ],
+      "tests": [
+        "decimal boundaries",
+        "stable pagination",
+        "strict validation",
+        "secret redaction",
+        "double idempotency",
+        "idempotency body conflict",
+        "nested transaction reuse",
+        "transient transaction retry",
+        "simulated multi-store rollback",
+        "outbox publisher failure persistence",
+        "safe HTTP error contract"
+      ],
+      "evidence": {
+        "lint": "passed",
+        "testFiles": 5,
+        "testsPassed": 22,
+        "formatCheck": "passed",
+        "realReplicaSetIntegration": "deferred-environment-unavailable"
+      }
+    },
+    {
+      "id": "BATCH-03",
+      "name": "Employees, authentication, and permissions",
+      "status": "VERIFIED",
+      "requirements": [
+        "EMPLOYEE-MODELS",
+        "PLAINTEXT-PASSWORD-SELECT-FALSE",
+        "MULTI-DEVICE-APPROVAL",
+        "ACCESS-REFRESH-ROTATION",
+        "PERMISSION-VERSIONING",
+        "ADMIN-BOOTSTRAP"
+      ],
+      "operations": [
+        "EMPLOYEE-CREATE",
+        "EMPLOYEE-UPDATE",
+        "EMPLOYEE-DEACTIVATE",
+        "DEVICE-APPROVE",
+        "DEVICE-BLOCK",
+        "AUTH-LOGIN",
+        "AUTH-REFRESH",
+        "AUTH-LOGOUT",
+        "PERMISSION-MATRIX-REPLACE",
+        "ROLE-PERMISSIONS-REPLACE"
+      ],
+      "routes": [
+        "POST /auth/login",
+        "POST /auth/refresh",
+        "POST /auth/logout",
+        "GET /admin/bootstrap",
+        "GET /employees-screen",
+        "POST /employees",
+        "GET /employees/:id",
+        "PATCH /employees/:id",
+        "POST /employee-devices/:id/approve",
+        "POST /employee-devices/:id/block",
+        "PUT /employees/:id/permission-matrix",
+        "GET /roles",
+        "POST /roles",
+        "PATCH /roles/:id",
+        "PUT /roles/:id/permissions",
+        "GET /permissions"
+      ],
+      "functions": [
+        "login",
+        "refreshSession",
+        "logout",
+        "createEmployee",
+        "updateEmployee",
+        "decideDevice",
+        "resolveEmployeePermissions",
+        "replacePermissionMatrix",
+        "createRole",
+        "replaceRolePermissions",
+        "getAdminBootstrap",
+        "employeeAuth",
+        "requirePermission"
+      ],
+      "tests": [
+        "password visibility permission",
+        "access token signature and expiry",
+        "new device pending without session",
+        "approved device full login",
+        "blocked device session revocation",
+        "permissionsVersion access invalidation",
+        "inactive employee login and refresh rejection",
+        "strict auth validation"
+      ],
+      "evidence": {
+        "lint": "passed",
+        "testFiles": 6,
+        "testsPassed": 32,
+        "formatCheck": "passed",
+        "realReplicaSetIntegration": "deferred-environment-unavailable"
+      }
+    },
+    {
+      "id": "BATCH-04",
+      "name": "Attendance and adjustments",
+      "status": "VERIFIED",
+      "requirements": [
+        "ATTENDANCE-SNAPSHOT",
+        "LOGIN-CHECK-IN",
+        "SINGLE-OPEN-ATTENDANCE",
+        "CAIRO-TIMEZONE",
+        "OVERNIGHT-SHIFT",
+        "DRAWER-CHECKOUT-GUARD",
+        "IMMUTABLE-ADJUSTMENTS"
+      ],
+      "operations": [
+        "ATTENDANCE-CHECK-IN",
+        "ATTENDANCE-ADMIN-CHECK-OUT",
+        "ATTENDANCE-FORCE-CLOSE",
+        "ATTENDANCE-ADJUST",
+        "ATTENDANCE-LIST",
+        "ATTENDANCE-DETAIL"
+      ],
+      "routes": [
+        "POST /attendance/check-in",
+        "GET /attendance",
+        "GET /attendance/:id",
+        "POST /attendance/:id/check-out",
+        "POST /attendance/:id/adjustments",
+        "POST /attendance/:id/force-close"
+      ],
+      "functions": [
+        "checkIn",
+        "adminCheckOut",
+        "forceCloseAttendance",
+        "createAttendanceAdjustment",
+        "calculateAttendanceMetrics",
+        "resolveAttendanceDate",
+        "assertEmployeeHasNoOpenDrawer",
+        "listAttendance",
+        "getAttendanceDetails"
+      ],
+      "tests": [
+        "Cairo grace and lateness",
+        "overnight attendance date",
+        "duplicate check-in",
+        "approved-login automatic attendance",
+        "open drawer checkout prevention",
+        "successful admin checkout duration",
+        "historical correction old/new values"
+      ],
+      "evidence": {
+        "lint": "passed",
+        "testFiles": 7,
+        "testsPassed": 38,
+        "formatCheck": "passed",
+        "realReplicaSetIntegration": "deferred-environment-unavailable",
+        "drawerProductionAdapter": "scheduled-for-drawer-batch"
+      }
+    },
+    {
+      "id": "BATCH-05",
+      "name": "Suppliers and manual accounts",
+      "status": "VERIFIED",
+      "requirements": [
+        "SUPPLIER-PROFILE",
+        "SEPARATE-DEBT-RECEIVABLE",
+        "MANUAL-ACCOUNT-ONLY",
+        "CASH-DRAWER-SETTLEMENT",
+        "IMMUTABLE-SUPPLIER-LEDGER",
+        "SINGLE-REVERSAL",
+        "PAGINATION-10"
+      ],
+      "operations": [
+        "SUPPLIER-CREATE",
+        "SUPPLIER-UPDATE",
+        "SUPPLIER-STATUS",
+        "SUPPLIER-DEBT",
+        "SUPPLIER-RECEIVABLE",
+        "SUPPLIER-DEBT-PAYMENT",
+        "SUPPLIER-RECEIVABLE-COLLECTION",
+        "SUPPLIER-ENTRY-REVERSAL",
+        "SUPPLIER-SCREEN",
+        "SUPPLIER-DETAIL",
+        "SUPPLIER-ENTRY-LIST"
+      ],
+      "routes": [
+        "GET /suppliers-screen",
+        "POST /suppliers",
+        "GET /suppliers/:id",
+        "PATCH /suppliers/:id",
+        "POST /suppliers/:id/status",
+        "POST /suppliers/:id/account-entries",
+        "GET /suppliers/:id/account-entries",
+        "POST /supplier-account-entries/:id/reverse"
+      ],
+      "functions": [
+        "createSupplier",
+        "updateSupplier",
+        "setSupplierStatus",
+        "assertActiveSupplier",
+        "getSupplierSnapshot",
+        "recordDebt",
+        "recordReceivable",
+        "payDebt",
+        "collectReceivable",
+        "reverseSupplierEntry",
+        "getSuppliersScreen",
+        "getSupplierDetails",
+        "listSupplierEntries"
+      ],
+      "tests": [
+        "atomic supplier and zero account",
+        "independent debt and receivable",
+        "overpayment rejection",
+        "exact debt cash-out",
+        "receivable cash-in",
+        "inactive supplier settlement",
+        "stale account version",
+        "double-submit single effect",
+        "single reversal",
+        "unsafe original reversal rejection",
+        "cash reversal",
+        "drawer unavailable fail-closed",
+        "phone normalization"
+      ],
+      "evidence": {
+        "lint": "passed",
+        "testFiles": 8,
+        "testsPassed": 51,
+        "formatCheck": "passed",
+        "realReplicaSetIntegration": "deferred-environment-unavailable",
+        "drawerProductionAdapter": "scheduled-for-drawer-batch",
+        "materialsProductionAdapter": "scheduled-for-inventory-batch"
+      }
+    },
+    {
+      "id": "BATCH-06",
+      "name": "Units, raw materials, batches, and inventory",
+      "status": "VERIFIED",
+      "requirements": [
+        "MEASUREMENT-UNITS",
+        "REQUIRED-MATERIAL-SUPPLIER",
+        "UNIT-LOCK-AFTER-FIRST-BATCH",
+        "IMMUTABLE-INVENTORY-LEDGER",
+        "PRIORITY-BATCH-CONSUMPTION",
+        "EXPIRED-BATCH-SALE-ALLOWED",
+        "FINAL-WITHDRAWAL",
+        "EXACT-ALLOCATION-RESTORE",
+        "PAGINATION-10"
+      ],
+      "operations": [
+        "UNIT-CREATE",
+        "UNIT-UPDATE",
+        "MATERIAL-CREATE",
+        "MATERIAL-UPDATE",
+        "PURCHASE-BATCH-CREATE",
+        "INVENTORY-SIMULATE",
+        "INVENTORY-CONSUME",
+        "INVENTORY-RESTORE",
+        "INVENTORY-WITHDRAW",
+        "BATCH-PRIORITY-REORDER"
+      ],
+      "routes": [
+        "GET /measurement-units",
+        "POST /measurement-units",
+        "PATCH /measurement-units/:id",
+        "GET /raw-materials-screen",
+        "POST /raw-materials",
+        "GET /raw-materials/:id",
+        "PATCH /raw-materials/:id",
+        "POST /raw-materials/:id/withdrawals",
+        "PUT /raw-materials/:id/batch-priorities",
+        "GET /raw-material-withdrawals"
+      ],
+      "functions": [
+        "calculateConversionFactor",
+        "createMeasurementUnit",
+        "createRawMaterial",
+        "createBatchFromPurchase",
+        "simulateRecipeRequirements",
+        "allocateRecipeRequirements",
+        "consumeFromBatch",
+        "restoreAllocations",
+        "withdrawBatchQuantity",
+        "reorderBatchPriorities"
+      ],
+      "tests": [
+        "compatible unit conversion",
+        "multi-batch priority simulation",
+        "expired batch allowed",
+        "insufficient stock",
+        "exact final quantity and value zero",
+        "exact allocation restoration",
+        "duplicate restoration idempotency",
+        "stale allocation race conflict",
+        "sale versus withdrawal version conflict",
+        "actual multi-batch cost allocations"
+      ],
+      "evidence": {
+        "lint": "passed",
+        "testFiles": 9,
+        "testsPassed": 60,
+        "formatCheck": "passed",
+        "realReplicaSetIntegration": "deferred-environment-unavailable",
+        "productsProductionAdapter": "scheduled-for-products-batch"
+      }
+    },
+    {
+      "id": "BATCH-07",
+      "name": "Derived inventory warnings",
+      "status": "VERIFIED",
+      "requirements": [
+        "LOW-STOCK-DERIVED-WARNING",
+        "EXPIRING-DERIVED-WARNING",
+        "EXPIRED-DERIVED-WARNING",
+        "CAIRO-BUSINESS-DATE",
+        "SOURCE-VERSION-CACHE",
+        "DATA-QUALITY-FAILURE",
+        "PAGINATION-10"
+      ],
+      "operations": ["WARNINGS-SCREEN", "WARNINGS-SUMMARY", "WARNING-EVALUATE"],
+      "routes": ["GET /warnings-screen", "GET /warnings/summary"],
+      "functions": [
+        "calculateDaysUntilExpiry",
+        "evaluateLowStock",
+        "evaluateBatchExpiry",
+        "getWarningsScreen",
+        "getWarningsSummary"
+      ],
+      "tests": [
+        "zero-stock critical boundary",
+        "minimum-stock inclusive boundary",
+        "expired yesterday boundary",
+        "expiring today boundary",
+        "expiry alert last-day boundary",
+        "empty batch excluded",
+        "combined screen summary and pagination",
+        "type filter preserves complete summary",
+        "source failure data quality",
+        "source-version cache invalidation"
+      ],
+      "evidence": {
+        "lint": "passed",
+        "testFiles": 10,
+        "testsPassed": 68,
+        "formatCheck": "passed",
+        "openShiftWarningSource": "scheduled-for-drawer-batch"
+      }
+    },
+    {
+      "id": "BATCH-08",
+      "name": "Products, recipes, costing, and catalog",
+      "status": "VERIFIED",
+      "requirements": [
+        "PRODUCT-HIERARCHY",
+        "RECIPE-VALIDATION",
+        "MATERIAL-LOCK-ON-RECIPE",
+        "EXPECTED-BATCH-COST",
+        "PROFIT-MARGIN",
+        "MENU-VISIBILITY",
+        "PUBLIC-CATALOG-ETAG",
+        "AI-NO-RECIPE-LEAK",
+        "PAGINATION-10"
+      ],
+      "operations": [
+        "CATEGORY-CREATE-UPDATE",
+        "PRODUCT-CREATE-UPDATE",
+        "PRODUCT-TYPE-CREATE",
+        "PRODUCT-SIZE-CREATE",
+        "RECIPE-REPLACE",
+        "ADDON-CREATE-UPDATE",
+        "EXPECTED-COST-SIMULATE",
+        "CATALOG-READ",
+        "ORDER-PRODUCT-SNAPSHOT"
+      ],
+      "routes": [
+        "GET /products-screen",
+        "POST /product-categories",
+        "PATCH /product-categories/:id",
+        "POST /products",
+        "GET /products/:id",
+        "PATCH /products/:id",
+        "POST /products/:id/types",
+        "POST /products/:id/sizes",
+        "PUT /product-sizes/:id/recipe",
+        "POST /products/:id/addons",
+        "PATCH /product-addons/:id",
+        "GET /catalog"
+      ],
+      "functions": [
+        "createCategory",
+        "updateCategory",
+        "createProduct",
+        "updateProduct",
+        "addProductType",
+        "addProductSize",
+        "createAddon",
+        "updateAddon",
+        "validateRecipeIngredients",
+        "replaceSizeRecipe",
+        "calculateExpectedProductCost",
+        "getCatalog",
+        "searchVisibleProductsForAi",
+        "snapshotForOrder"
+      ],
+      "tests": [
+        "duplicate recipe material",
+        "inactive recipe material",
+        "recipe material identity lock",
+        "multi-batch expected cost and profit",
+        "deterministic catalog version",
+        "public catalog nesting",
+        "AI sensitive field exclusion"
+      ],
+      "evidence": {
+        "lint": "passed",
+        "testFiles": 11,
+        "testsPassed": 74,
+        "formatCheck": "passed",
+        "realReplicaSetIntegration": "deferred-environment-unavailable",
+        "mediaAdapter": "reference-contract-only"
+      }
+    },
+    {
+      "id": "BATCH-09",
+      "name": "Purchase groups and supplier invoices",
+      "status": "VERIFIED",
+      "requirements": [
+        "MULTI-SUPPLIER-PURCHASE-DRAFT",
+        "SERVER-MATERIAL-SUPPLIER-SNAPSHOT",
+        "SPLIT-BY-SUPPLIER",
+        "UNREGISTERED-REGISTERED-STATES",
+        "PURCHASE-BATCH-LINK",
+        "REGISTER-MANY-ATOMIC",
+        "NO-SUPPLIER-ACCOUNT-EFFECT",
+        "NO-DRAWER-EFFECT",
+        "PRINT-SNAPSHOT",
+        "PAGINATION-10"
+      ],
+      "operations": [
+        "PURCHASE-GROUP-CREATE",
+        "PURCHASE-GROUP-UPDATE",
+        "PURCHASE-DRAFT-DELETE",
+        "PURCHASE-SPLIT-BY-SUPPLIER",
+        "PURCHASE-ITEM-REGISTER",
+        "PURCHASE-GROUP-REGISTER-MANY",
+        "PURCHASE-STATUS-RECOMPUTE",
+        "PURCHASE-PRINT"
+      ],
+      "routes": [
+        "GET /purchases-screen",
+        "POST /purchase-groups",
+        "GET /purchase-groups/:id",
+        "PATCH /purchase-groups/:id",
+        "DELETE /purchase-groups/:id",
+        "POST /purchase-groups/:id/split-by-supplier",
+        "POST /purchase-items/:id/register",
+        "POST /purchase-groups/:id/register-many",
+        "GET /purchase-groups/:id/print-data",
+        "GET /supplier-purchase-invoices/:id/print-data"
+      ],
+      "functions": [
+        "createPurchaseGroup",
+        "updatePurchaseGroup",
+        "deleteDraftPurchaseGroup",
+        "splitPurchaseGroupBySupplier",
+        "registerPurchaseItem",
+        "registerPurchaseItems",
+        "recomputePurchaseStatuses",
+        "getPurchasesScreen",
+        "getPurchaseGroupPrintData",
+        "getSupplierInvoicePrintData"
+      ],
+      "tests": [
+        "multi-supplier split totals",
+        "stale split no writes",
+        "expired receipt registration",
+        "batch and movement linkage",
+        "double registration prevention",
+        "register-many ownership prevalidation"
+      ],
+      "evidence": {
+        "lint": "passed",
+        "testFiles": 12,
+        "testsPassed": 78,
+        "formatCheck": "passed",
+        "realReplicaSetIntegration": "deferred-environment-unavailable"
+      }
+    },
+    {
+      "id": "BATCH-10",
+      "name": "Purchase returns",
+      "status": "VERIFIED",
+      "requirements": [
+        "EXPLICIT-RETURN-BATCH",
+        "RETURN-CURRENT-BATCH-VALUE",
+        "RETURN-PREFLIGHT-VALIDATION",
+        "RETURN-SALE-RACE-GUARD",
+        "IMMUTABLE-RETURN-INVOICE",
+        "NO-SUPPLIER-ACCOUNT-EFFECT",
+        "NO-DRAWER-EFFECT",
+        "RETURN-HISTORY-PRINT",
+        "PAGINATION-10"
+      ],
+      "operations": [
+        "PURCHASE-RETURN-VALIDATE",
+        "PURCHASE-RETURN-CREATE",
+        "PURCHASE-RETURN-INVENTORY-EXIT",
+        "PURCHASE-RETURN-LIST",
+        "PURCHASE-RETURN-DETAIL",
+        "PURCHASE-RETURN-PRINT"
+      ],
+      "routes": [
+        "GET /purchase-returns-screen",
+        "POST /purchase-returns",
+        "GET /purchase-returns/:id",
+        "GET /purchase-returns/:id/print-data"
+      ],
+      "functions": [
+        "validateReturnItems",
+        "createPurchaseReturn",
+        "getPurchaseReturnsScreen",
+        "getPurchaseReturnDetails",
+        "getPurchaseReturnPrintData"
+      ],
+      "tests": [
+        "partial return exact batch value",
+        "return quantity exceeds stock",
+        "return versus sale stale version",
+        "final return zeroes quantity and value",
+        "return movement linkage",
+        "duplicate stale submission",
+        "immutable return model"
+      ],
+      "evidence": {
+        "lint": "passed",
+        "testFiles": 13,
+        "testsPassed": 83,
+        "formatCheck": "passed",
+        "realReplicaSetIntegration": "deferred-environment-unavailable"
+      }
+    },
+    {
+      "id": "BATCH-11",
+      "name": "Cash drawer shifts and ledger",
+      "status": "VERIFIED",
+      "requirements": [
+        "SINGLE-OPEN-SHIFT",
+        "OPENING-NON-REVENUE",
+        "IMMUTABLE-CASH-LEDGER",
+        "MANUAL-AND-SOURCE-MOVEMENTS",
+        "REVERSAL",
+        "CLOSE-RECONCILIATION",
+        "LEDGER-MISMATCH-GUARD",
+        "TWELVE-HOUR-ALERT",
+        "SUPPLIER-DRAWER-ADAPTER",
+        "PAGINATION-10"
+      ],
+      "operations": [
+        "DRAWER-OPEN",
+        "DRAWER-CASH-IN",
+        "DRAWER-CASH-OUT",
+        "DRAWER-SOURCE-TRANSACTION",
+        "DRAWER-REVERSE",
+        "DRAWER-CLOSE",
+        "DRAWER-WARNING",
+        "DRAWER-PRINT"
+      ],
+      "routes": [
+        "GET /cash-drawer-screen",
+        "POST /cash-drawer-shifts",
+        "GET /cash-drawer-shifts",
+        "GET /cash-drawer-shifts/:id",
+        "POST /cash-drawer-shifts/:id/cash-in",
+        "POST /cash-drawer-shifts/:id/cash-out",
+        "POST /cash-drawer-transactions/:id/reverse",
+        "POST /cash-drawer-shifts/:id/close",
+        "GET /cash-drawer-shifts/:id/transactions",
+        "GET /cash-drawer-shifts/:id/alerts",
+        "GET /cash-drawer-shifts/:id/print-data"
+      ],
+      "functions": [
+        "openShift",
+        "createCashTransaction",
+        "createManualMovement",
+        "reverseManualTransaction",
+        "closeShift",
+        "emitDueShiftWarnings",
+        "createSupplierSettlement",
+        "reverseSupplierSettlement",
+        "hasOpenShiftForEmployee"
+      ],
+      "tests": [
+        "opening balance excluded from flows",
+        "cash projection update",
+        "insufficient cash out",
+        "ledger mismatch blocks close"
+      ],
+      "evidence": {
+        "lint": "passed",
+        "testFiles": 14,
+        "testsPassed": 86,
+        "formatCheck": "passed",
+        "realReplicaSetIntegration": "deferred-environment-unavailable"
+      }
+    },
+    {
+      "id": "BATCH-12",
+      "name": "Cash payments and final invoices",
+      "status": "VERIFIED",
+      "requirements": [
+        "CASH-ONLY-PAYMENT",
+        "DIRECT-CASH-DRAWER-IN",
+        "COD-CUSTODY-NO-DRAWER",
+        "COD-SETTLEMENT-ONCE",
+        "CASH-REFUND-OR-PENDING",
+        "FINAL-INVOICE-IMMUTABLE",
+        "PRINT-COUNTER-ONLY",
+        "PAGINATION-10"
+      ],
+      "operations": [
+        "PAY-01-DIRECT-COLLECT",
+        "PAY-02-COD-COLLECT",
+        "PAY-03-COD-SETTLE",
+        "PAY-04-CASH-REFUND",
+        "PAY-05-PENDING-REFUND-COMPLETE",
+        "INVOC-01-PREVIEW",
+        "INVOC-02-FINALIZE",
+        "INVOC-03-PRINT"
+      ],
+      "routes": [
+        "POST /orders/:id/payments",
+        "GET /orders/:id/payments",
+        "POST /order-payments/:id/settle",
+        "POST /order-payments/:id/refunds",
+        "POST /cash-refunds/:id/complete",
+        "GET /invoices",
+        "GET /invoices/:id",
+        "GET /invoices/:id/print-data",
+        "POST /invoices/:id/print-events",
+        "GET /orders/:id/invoice-preview",
+        "POST /orders/:id/invoice-finalize"
+      ],
+      "functions": [
+        "collectCash",
+        "settleCodPayment",
+        "createCashRefund",
+        "completePendingCashRefund",
+        "calculateOrderPaymentSummary",
+        "listOrderPayments",
+        "buildInvoicePreview",
+        "finalizeInvoice",
+        "recordInvoicePrint",
+        "calculateInvoiceChecksum"
+      ],
+      "tests": [
+        "cash-only validation boundary",
+        "refund body validation",
+        "direct cash single drawer movement",
+        "cod without assignment rejection",
+        "over-balance collection rejection",
+        "settlement conflict",
+        "cod settlement once",
+        "refund exceeds payment rejection",
+        "pending refund without totals change",
+        "pending refund completion",
+        "finalize idempotency",
+        "print counter only",
+        "preview checksum",
+        "checksum key-order stability"
+      ],
+      "evidence": {
+        "lint": "passed",
+        "testFiles": 1,
+        "testsPassed": 14,
+        "formatCheck": "passed",
+        "realReplicaSetIntegration": "deferred-environment-unavailable"
+      }
+    },
+    {
+      "id": "BATCH-13",
+      "name": "Admin orders with live inventory allocation",
+      "status": "VERIFIED",
+      "requirements": [
+        "SERVER-PRICING-SNAPSHOT",
+        "ORDER-CONFIRM-ALLOCATE",
+        "MULTI-BATCH-COST-PROFIT",
+        "APPEND-READY-TO-PREPARING",
+        "EXACT-ALLOCATION-RESTORE",
+        "CANCEL-REFUND-CASE",
+        "ITEM-READY-DERIVATION",
+        "TAKEAWAY-COMPLETE-PAY-INVOICE",
+        "TABLE-DELIVERY-PORT-GUARD",
+        "IMMUTABLE-STATUS-EVENTS",
+        "ORDERS-PORT-PROVIDER",
+        "PAGINATION-10"
+      ],
+      "operations": [
+        "ORD-01-CONFIRM",
+        "ORD-02-APPEND",
+        "ORD-03-CANCEL-ITEM",
+        "ORD-04-CANCEL-ORDER",
+        "ORD-05-COMPLETE-TAKEAWAY",
+        "ORD-06-COMPLETE-TABLE-GUARD",
+        "ORD-07-COMPLETE-DELIVERY-GUARD",
+        "ORD-08-DETAIL-SCREEN",
+        "PREP-READY-TRANSITION"
+      ],
+      "routes": [
+        "POST /orders",
+        "GET /orders-online-screen",
+        "GET /orders/:id",
+        "POST /orders/:id/items",
+        "POST /orders/:id/items/:itemId/cancel",
+        "POST /orders/:id/cancel",
+        "POST /orders/:id/complete-takeaway",
+        "POST /preparation/order-items/:itemId/ready"
+      ],
+      "functions": [
+        "priceOrderItems",
+        "calculateOrderTotals",
+        "calculateBalanceDue",
+        "confirmNewOrder",
+        "appendOrderItems",
+        "cancelOrderItem",
+        "cancelWholeOrder",
+        "markOrderItemReady",
+        "completeTakeawayOrder",
+        "completeTableOrder",
+        "completeDeliveredOrder",
+        "getOrderForPayment",
+        "applyOrderPaymentSummary",
+        "getOrderPaymentSummary",
+        "getOrderInvoicePayload",
+        "getOrdersOnlineScreen",
+        "getOrderDetails"
+      ],
+      "tests": [
+        "empty cart and dine-in session validation",
+        "server snapshot pricing with cost",
+        "insufficient stock full failure",
+        "addon partial cost",
+        "append ready to preparing",
+        "stale append conflict",
+        "item cancel exact restore",
+        "cancel conflict",
+        "whole cancel refund case",
+        "last ready derives order ready",
+        "stale ready conflict",
+        "completion readiness gate",
+        "takeaway payment invoice completion",
+        "payment version guard",
+        "payment delta projection"
+      ],
+      "evidence": {
+        "lint": "passed",
+        "testFiles": 1,
+        "testsPassed": 15,
+        "formatCheck": "passed",
+        "realReplicaSetIntegration": "deferred-environment-unavailable"
+      }
+    },
+    {
+      "id": "BATCH-14",
+      "name": "Preparation kitchen screens",
+      "status": "VERIFIED",
+      "requirements": [
+        "PREP-SCREEN-GROUP-TAB",
+        "PREP-FIFO-ORDER",
+        "PREP-CARD-NO-RECIPE",
+        "PREP-DETAIL-FROZEN-RECIPE",
+        "PREP-READONLY-SCREENS",
+        "RECIPE-SNAPSHOT-PERSISTENCE",
+        "PAGINATION-10"
+      ],
+      "operations": ["PREP-01-SCREEN", "PREP-02-DETAIL"],
+      "routes": ["GET /preparation/orders", "GET /preparation/orders/:id"],
+      "functions": ["getPreparationScreen", "getPreparationOrderDetails"],
+      "tests": [
+        "group tab validation",
+        "current screen progress",
+        "ready tab filter",
+        "empty tables group",
+        "detail frozen recipe",
+        "unknown order rejection",
+        "snapshot persistence at confirm"
+      ],
+      "evidence": {
+        "lint": "passed",
+        "testFiles": 1,
+        "testsPassed": 7,
+        "formatCheck": "passed",
+        "realReplicaSetIntegration": "deferred-environment-unavailable"
+      }
+    },
+    {
+      "id": "BATCH-15",
+      "name": "Customers and order reviews",
+      "status": "VERIFIED",
+      "requirements": [
+        "PHONE-NORMALIZED-UPSERT",
+        "LATEST-PROFILE-ORDERING",
+        "CUSTOMER-STATUS-GUARD",
+        "ORDER-CUSTOMER-LINK",
+        "COMPLETION-COUNTER",
+        "SINGLE-REVIEW-PER-ORDER",
+        "REVIEW-REVISION-TRAIL",
+        "REVIEW-MODERATION-PRESERVE",
+        "PAGINATION-10"
+      ],
+      "operations": [
+        "CUS-01-UPSERT",
+        "CUS-02-CREATE",
+        "CUS-03-UPDATE-STATUS",
+        "CUS-04-SCREEN-DETAIL",
+        "REV-01-SUBMIT",
+        "REV-02-REVISE",
+        "REV-03-MODERATE",
+        "REV-04-LIST"
+      ],
+      "routes": [
+        "GET /customers-screen",
+        "POST /customers",
+        "GET /customers/:id",
+        "PATCH /customers/:id",
+        "GET /reviews",
+        "POST /orders/:id/reviews",
+        "GET /orders/:id/reviews",
+        "PATCH /reviews/:id",
+        "POST /reviews/:id/moderation"
+      ],
+      "functions": [
+        "upsertCustomerForOrder",
+        "recordCustomerOrderCompletion",
+        "createCustomer",
+        "updateCustomerProfile",
+        "getCustomersScreen",
+        "getCustomerDetails",
+        "submitOrderReview",
+        "updateOrderReview",
+        "moderateReview",
+        "listReviews",
+        "listCustomerReviews",
+        "getOrderReview",
+        "listCustomerOrders"
+      ],
+      "tests": [
+        "single customer across phone formats",
+        "late older order profile ordering",
+        "concurrent first order race",
+        "duplicate manual creation",
+        "block reason and version guard",
+        "completion counter",
+        "review before completion rejection",
+        "single review per order",
+        "edit revision trail",
+        "moderation preserves stars",
+        "order customer link"
+      ],
+      "evidence": {
+        "lint": "passed",
+        "testFiles": 1,
+        "testsPassed": 11,
+        "formatCheck": "passed",
+        "realReplicaSetIntegration": "deferred-environment-unavailable"
+      }
+    },
+    {
+      "id": "BATCH-16",
+      "name": "Public customer web and tracking",
+      "status": "VERIFIED",
+      "requirements": [
+        "PUBLIC-CHECKOUT-CHANNEL",
+        "CREDENTIALS-RAW-ONCE",
+        "READ-ACTION-SEPARATION",
+        "TOKEN-EXPIRY",
+        "LIMITED-LOOKUP",
+        "LOOKUP-RATE-LIMIT",
+        "PUBLIC-APPEND",
+        "CANCELLATION-AUTO-PENDING",
+        "CUSTOMER-RECEIPT-GATE",
+        "ACCESS-SESSION-HISTORY",
+        "LOCAL-STORAGE-CONTRACT",
+        "PAGINATION-10"
+      ],
+      "operations": [
+        "WEB-01-CHECKOUT",
+        "WEB-02-LOOKUP",
+        "WEB-03-TRACKING",
+        "WEB-04-APPEND",
+        "WEB-05-CANCELLATION",
+        "WEB-06-RECEIPT",
+        "WEB-07-SESSION-HISTORY"
+      ],
+      "routes": [
+        "POST /public-orders",
+        "POST /public-orders/lookup",
+        "GET /public-orders/:orderNumber/tracking",
+        "POST /public-orders/:orderNumber/items",
+        "POST /public-orders/:orderNumber/cancellation-request",
+        "POST /public-orders/:orderNumber/receive",
+        "POST /public-orders/:orderNumber/reviews",
+        "POST /customer-access-sessions",
+        "GET /customer/orders"
+      ],
+      "functions": [
+        "createPublicOrder",
+        "issueOrderCredentials",
+        "lookupPublicOrder",
+        "addItemsUsingActionToken",
+        "requestOrderCancellation",
+        "confirmCustomerReceipt",
+        "submitPublicReview",
+        "createCustomerAccessSession",
+        "getCustomerOrderHistory",
+        "getPublicTracking",
+        "maskPhone",
+        "resolveReadCredential",
+        "resolveActionCredential",
+        "resolveAccessSession",
+        "createLookupRateLimiter"
+      ],
+      "tests": [
+        "checkout validation",
+        "raw once hash only",
+        "scope separation",
+        "expiry marking",
+        "lookup projection and rate limit",
+        "wrong phone oracle",
+        "tracking no internals",
+        "auto approve cancellation",
+        "pending cancellation",
+        "receipt gate",
+        "receipt completion",
+        "history review status",
+        "public pipeline channel"
+      ],
+      "evidence": {
+        "lint": "passed",
+        "testFiles": 1,
+        "testsPassed": 13,
+        "formatCheck": "passed",
+        "realReplicaSetIntegration": "deferred-environment-unavailable"
+      }
+    },
+    {
+      "id": "BATCH-17",
+      "name": "Delegates and delivery fulfillment",
+      "status": "VERIFIED",
+      "requirements": [
+        "DELEGATE-CAPACITY",
+        "SINGLE-ACTIVE-ASSIGNMENT",
+        "HANDOVER-AVAILABILITY",
+        "REASSIGN-LEG-CLOSURE",
+        "FAILED-KEEPS-TRANSIT",
+        "RETURN-TO-READY",
+        "RECEIPT-CONFIRMATION-RECORD",
+        "ADMIN-OVERRIDE-REASON",
+        "COD-SETTLEMENT-ONCE",
+        "WHATSAPP-LINK-ONLY",
+        "PAGINATION-10"
+      ],
+      "operations": [
+        "DEL-01-CREATE",
+        "DEL-02-ASSIGN",
+        "DEL-03-HANDOVER",
+        "DEL-04-REASSIGN",
+        "DEL-05-FAILED",
+        "DEL-06-RETURNED",
+        "DEL-07-CONFIRM",
+        "DEL-08-OVERRIDE",
+        "DEL-09-SETTLE",
+        "DEL-10-WHATSAPP"
+      ],
+      "routes": [
+        "GET /delegates-screen",
+        "POST /delegates",
+        "GET /delegates/:id",
+        "PATCH /delegates/:id",
+        "POST /orders/:id/assign-delegate",
+        "GET /delivery-assignments/:id",
+        "POST /delivery-assignments/:id/handover",
+        "POST /delivery-assignments/:id/reassign",
+        "POST /delivery-assignments/:id/failed",
+        "POST /delivery-assignments/:id/returned",
+        "POST /delivery-assignments/:id/admin-confirm-delivery",
+        "POST /delivery-assignments/:id/settle-cash",
+        "POST /delivery-assignments/:id/whatsapp-share-opened"
+      ],
+      "functions": [
+        "createDelegate",
+        "updateDelegate",
+        "assignDelegate",
+        "handoverAssignment",
+        "reassignDelivery",
+        "recordFailedAttempt",
+        "returnDeliveryToStore",
+        "confirmDeliveryReceipt",
+        "adminConfirmDelivery",
+        "settleAssignmentCash",
+        "recordWhatsappShare",
+        "getDelegatesScreen",
+        "getDelegateDetails",
+        "getAssignmentDetails"
+      ],
+      "tests": [
+        "delegate validation and duplicates",
+        "assign links and capacity",
+        "assign conflicts",
+        "double assignment block",
+        "handover availability",
+        "handover conflict",
+        "reassign leg closure",
+        "failed keeps transit",
+        "return to ready",
+        "receipt confirmation record",
+        "override reason gate",
+        "settlement once",
+        "empty settlement refusal",
+        "whatsapp link log",
+        "admin override completion"
+      ],
+      "evidence": {
+        "lint": "passed",
+        "testFiles": 1,
+        "testsPassed": 16,
+        "formatCheck": "passed",
+        "realReplicaSetIntegration": "deferred-environment-unavailable"
+      }
+    },
+    {
+      "id": "BATCH-18",
+      "name": "Tables board and dine-in sessions",
+      "status": "VERIFIED",
+      "requirements": [
+        "FIXED-TWENTY-TABLES",
+        "BOARD-OCCUPANCY-DERIVATION",
+        "ATOMIC-SESSION-OPEN",
+        "TABLE-OCCUPANCY-RACE",
+        "OUT-OF-SERVICE-GUARD",
+        "DINE-IN-WITHOUT-CUSTOMER",
+        "SESSION-ADD-CANCEL",
+        "SESSION-CLOSE-PAY-INVOICE",
+        "PRINT-SNAPSHOT",
+        "TABLES-PORT-PROVIDER"
+      ],
+      "operations": [
+        "TBL-01-BOARD",
+        "TBL-02-TABLE-DETAIL",
+        "TBL-03-STATUS",
+        "TBL-04-OPEN-ORDER",
+        "TBL-05-ADD-ITEMS",
+        "TBL-06-CANCEL",
+        "TBL-07-CLOSE",
+        "TBL-08-PRINT"
+      ],
+      "routes": [
+        "GET /tables-board",
+        "GET /tables/:id",
+        "PATCH /tables/:id",
+        "POST /tables/:id/admin-orders",
+        "GET /table-sessions/:id",
+        "POST /table-sessions/:id/items",
+        "POST /table-sessions/:id/cancel",
+        "POST /table-sessions/:id/close",
+        "GET /table-sessions/:id/print-data"
+      ],
+      "functions": [
+        "ensureDefaultTables",
+        "setTableStatus",
+        "openTableOrder",
+        "addSessionItems",
+        "cancelTableSession",
+        "closeTableSession",
+        "closeSessionForOrder",
+        "getTablesBoard",
+        "getTableDetails",
+        "getSessionDetails",
+        "getSessionPrintData"
+      ],
+      "tests": [
+        "twenty table seed",
+        "out of service reason",
+        "service flag version guards",
+        "atomic open with dine-in ticket",
+        "double open block",
+        "out of service open refusal",
+        "session scoped append",
+        "close with payment and invoice",
+        "unpaid close demands payment",
+        "close readiness gate",
+        "session order joint cancel",
+        "port order resolution",
+        "board occupancy cards",
+        "dine-in skips customer link"
+      ],
+      "evidence": {
+        "lint": "passed",
+        "testFiles": 1,
+        "testsPassed": 14,
+        "formatCheck": "passed",
+        "realReplicaSetIntegration": "deferred-environment-unavailable"
+      }
+    },
+    {
+      "id": "BATCH-19",
+      "name": "Table guest experience and proposals",
+      "status": "VERIFIED",
+      "requirements": [
+        "QR-ROTATION-REVOCATION",
+        "GUEST-TOKEN-HASH-ONCE",
+        "PROPOSAL-SNAPSHOT-NO-EFFECT",
+        "SINGLE-ACTIVE-PROPOSAL",
+        "PROPOSAL-REVIEW-STATES",
+        "CONFIRM-APPEND-OR-OPEN",
+        "GUEST-SESSION-ORDER-LINK",
+        "GUEST-REVIEW-OWNERSHIP",
+        "GUEST-TOKEN-ISOLATION",
+        "PAGINATION-10"
+      ],
+      "operations": [
+        "GST-01-BOOTSTRAP",
+        "GST-02-ROTATE",
+        "PRO-01-SUBMIT",
+        "PRO-02-CURRENT",
+        "PRO-03-CANCEL",
+        "PRO-04-REVIEW",
+        "PRO-05-CONFIRM",
+        "REV-04-GUEST-SUBMIT"
+      ],
+      "routes": [
+        "POST /table-experience/bootstrap",
+        "POST /table-experience/order-proposals",
+        "GET /table-experience/order-proposals/current",
+        "POST /table-experience/order-proposals/cancel",
+        "POST /table-experience/orders/:id/reviews",
+        "POST /tables/:id/rotate-qr",
+        "GET /table-order-proposals",
+        "GET /table-order-proposals/:id",
+        "POST /table-order-proposals/:id/start-review",
+        "POST /table-order-proposals/:id/request-changes",
+        "POST /table-order-proposals/:id/reject",
+        "POST /table-order-proposals/:id/confirm"
+      ],
+      "functions": [
+        "bootstrapGuestSession",
+        "rotateTableQr",
+        "submitProposal",
+        "getCurrentProposal",
+        "cancelProposal",
+        "reviewProposal",
+        "confirmProposal",
+        "submitGuestReview",
+        "resolveGuestSession",
+        "listProposals",
+        "getProposalDetails"
+      ],
+      "tests": [
+        "wrong qr rejection",
+        "single use token",
+        "rotation revocation",
+        "snapshot without side effects",
+        "single active proposal",
+        "guest cancel",
+        "review state walk",
+        "confirm appends to open order",
+        "confirm opens fresh order",
+        "double confirm block",
+        "token isolation",
+        "linked guest review",
+        "guest ownership stored",
+        "admin path stays closed"
+      ],
+      "evidence": {
+        "lint": "passed",
+        "testFiles": 1,
+        "testsPassed": 14,
+        "formatCheck": "passed",
+        "realReplicaSetIntegration": "deferred-environment-unavailable"
+      }
+    },
+    {
+      "id": "BATCH-20",
+      "name": "Table services and proposal linkage",
+      "status": "VERIFIED",
+      "requirements": [
+        "OWNER-KEY-SESSION-GUEST",
+        "OPEN-DEDUPE-PER-OWNER-TYPE",
+        "BILL-ACTIVE-ORDER-GATE",
+        "PROBLEM-HIGH-PRIORITY",
+        "NO-STOCK-NO-DRAWER-EFFECT",
+        "PROPOSAL-REVIEW-CALL",
+        "CONFIRM-RESOLVES-CALLS",
+        "CLOSE-SETTLES-BILL-CANCELS-REST",
+        "SCREEN-SUMMARY-LISTS",
+        "PAGINATION-10"
+      ],
+      "operations": [
+        "SVC-01-CREATE",
+        "SVC-02-REVIEW-CALL",
+        "SVC-03-RESOLVE",
+        "SVC-04-GUEST-CANCEL",
+        "SVC-05-PROPOSAL-CLEAR",
+        "SVC-06-CLOSE-CLEANUP",
+        "SVC-07-SCREEN"
+      ],
+      "routes": [
+        "POST /table-experience/services",
+        "POST /table-experience/services/:id/cancel",
+        "GET /table-services-screen",
+        "GET /table-service-requests/:id",
+        "POST /table-service-requests/:id/resolve"
+      ],
+      "functions": [
+        "createServiceRequest",
+        "createOrderReviewRequest",
+        "resolveServiceRequest",
+        "cancelServiceRequest",
+        "resolveProposalServices",
+        "closeSessionServices",
+        "getServicesScreen",
+        "getServiceRequestDetails"
+      ],
+      "tests": [
+        "per-type validation",
+        "guest owner scope",
+        "session owner scope",
+        "parallel dedupe",
+        "bill active order gate",
+        "problem priority",
+        "resolve with duration",
+        "guest cancel ownership",
+        "proposal review call",
+        "close bill resolve rest cancel",
+        "confirm clears calls",
+        "screen summary"
+      ],
+      "evidence": {
+        "lint": "passed",
+        "testFiles": 1,
+        "testsPassed": 12,
+        "formatCheck": "passed",
+        "realReplicaSetIntegration": "deferred-environment-unavailable"
+      }
+    },
+    {
+      "id": "BATCH-21",
+      "name": "Order cases and refund recovery",
+      "status": "VERIFIED",
+      "requirements": [
+        "CASE-APPROVE-EXECUTE",
+        "CASE-REJECT-REASON",
+        "OUT-FOR-DELIVERY-RETURN-FIRST",
+        "RETRY-COMPLETE-OR-PENDING",
+        "SWEEP-REPORT",
+        "CANCEL-CLOSES-ASSIGNMENT",
+        "PAGINATION-10"
+      ],
+      "operations": [
+        "CASE-01-APPROVE",
+        "CASE-02-REJECT",
+        "CASE-03-RETRY",
+        "CASE-04-SWEEP",
+        "CASE-05-LIST",
+        "CASE-06-AUTO-CLOSE"
+      ],
+      "routes": [
+        "GET /order-cancellation-requests",
+        "GET /order-cancellation-requests/:id",
+        "POST /order-cancellation-requests/:id/approve",
+        "POST /order-cancellation-requests/:id/reject",
+        "POST /cash-refunds/:id/retry",
+        "POST /cash-refunds/sweep"
+      ],
+      "functions": [
+        "approveCancellationRequest",
+        "rejectCancellationRequest",
+        "retryPendingCashRefund",
+        "sweepPendingCashRefunds",
+        "listCancellationRequests",
+        "getCancellationRequest",
+        "closeCancelledAssignments"
+      ],
+      "tests": [
+        "case list cap",
+        "approve executes",
+        "approve conflict",
+        "return before cancel",
+        "reject with reason",
+        "retry recovery",
+        "retry stays pending",
+        "sweep report",
+        "cancel closes assignment"
+      ],
+      "evidence": {
+        "lint": "passed",
+        "testFiles": 1,
+        "testsPassed": 9,
+        "formatCheck": "passed",
+        "realReplicaSetIntegration": "deferred-environment-unavailable"
+      }
+    },
+    {
+      "id": "BATCH-22",
+      "name": "Dashboard and realtime sync",
+      "status": "VERIFIED",
+      "requirements": [
+        "CAIRO-DAILY-PROJECTION",
+        "REBUILD-STALE-POLICY",
+        "DATA-QUALITY-PARTIAL",
+        "OUTBOX-SYNC-TRUTH",
+        "ROOM-PERMISSION-FILTER",
+        "PUBLIC-TOKEN-SCOPING",
+        "ENVELOPE-PUBLISH-FANOUT",
+        "PAGINATION-10"
+      ],
+      "operations": [
+        "DASH-01-SCREEN",
+        "DASH-02-PROJECTOR",
+        "DASH-03-REBUILD",
+        "RT-01-PUBLISH",
+        "RT-02-SYNC"
+      ],
+      "routes": ["GET /dashboard-screen", "GET /realtime/sync"],
+      "functions": [
+        "rebuildDashboardProjection",
+        "getDashboardScreen",
+        "cairoPeriod",
+        "cairoDayRange",
+        "resolveEventRooms",
+        "isRoomAllowed",
+        "mapRealtimePayload",
+        "publishRealtimeEvent",
+        "subscribeRealtime",
+        "resolveSyncIdentity",
+        "syncAggregates"
+      ],
+      "tests": [
+        "sync cursor validation",
+        "commerce rooms",
+        "table rooms",
+        "fallback rooms",
+        "permission gates",
+        "envelope shape",
+        "fanout delivery",
+        "room filtering",
+        "admin hiding",
+        "token scoping",
+        "order snapshots",
+        "cairo periods",
+        "rebuild metrics",
+        "partial failure flags",
+        "fresh screen"
+      ],
+      "evidence": {
+        "lint": "passed",
+        "testFiles": 1,
+        "testsPassed": 15,
+        "formatCheck": "passed",
+        "realReplicaSetIntegration": "deferred-environment-unavailable"
+      }
+    },
+    {
+      "id": "BATCH-23",
+      "name": "Financial reports audit and notifications",
+      "status": "VERIFIED",
+      "requirements": [
+        "SCREEN-CARDS-CHARTS",
+        "DETAIL-PAGINATION",
+        "CACHE-KEY-TTL",
+        "PARTIAL-SOURCE-NULLS",
+        "EXPORT-202-CHECKSUM",
+        "AUDIT-SCREEN-TIMELINE",
+        "AUDIT-EXPORT-REUSE",
+        "NOTIFICATION-DEDUPE-READ",
+        "PAGINATION-10"
+      ],
+      "operations": [
+        "RPT-01-SCREEN",
+        "RPT-02-SALES",
+        "RPT-03-INVENTORY",
+        "RPT-04-DRAWER",
+        "RPT-05-SUPPLIERS",
+        "RPT-06-DELEGATES",
+        "RPT-07-EXPORT",
+        "AUD-01-SCREEN",
+        "AUD-02-DETAIL",
+        "AUD-03-TIMELINE",
+        "NTF-01-CREATE",
+        "NTF-02-READ"
+      ],
+      "routes": [
+        "GET /financial-reports-screen",
+        "GET /financial-reports/sales",
+        "GET /financial-reports/inventory",
+        "GET /financial-reports/drawer",
+        "GET /financial-reports/suppliers",
+        "GET /financial-reports/delegates",
+        "POST /financial-reports/exports",
+        "GET /financial-reports/exports/:id",
+        "GET /audit-events-screen",
+        "GET /audit-events/:id",
+        "GET /entities/:entityType/:entityId/timeline",
+        "POST /audit-events/exports",
+        "GET /audit-events/exports/:id",
+        "GET /notifications",
+        "POST /notifications/:id/read",
+        "POST /notifications/read-all"
+      ],
+      "functions": [
+        "getFinancialReportScreen",
+        "getSalesReport",
+        "getInventoryReport",
+        "getDrawerReport",
+        "getSupplierReport",
+        "getDelegateReport",
+        "requestReportExport",
+        "processReportExport",
+        "getReportExportStatus",
+        "getAuditScreen",
+        "getAuditEvent",
+        "getEntityTimeline",
+        "createNotifications",
+        "markNotificationRead",
+        "markAllNotificationsRead",
+        "listNotifications"
+      ],
+      "tests": [
+        "range validation",
+        "screen cards",
+        "partial nulls",
+        "cache reuse",
+        "top products",
+        "export checksum",
+        "delegate ledger",
+        "audit summary",
+        "event ids",
+        "entity timeline",
+        "notification dedupe",
+        "inbox reads"
+      ],
+      "evidence": {
+        "lint": "passed",
+        "testFiles": 1,
+        "testsPassed": 12,
+        "formatCheck": "passed",
+        "realReplicaSetIntegration": "deferred-environment-unavailable"
+      }
+    },
+    {
+      "id": "BATCH-24",
+      "name": "AI barista and frontend chat link",
+      "status": "VERIFIED",
+      "requirements": [
+        "CATALOG-ONLY-PROJECTION",
+        "FIXED-PROMPT-NO-PII",
+        "UNKNOWN-ID-DROP",
+        "LOCAL-FALLBACK-CONTRACT",
+        "RATE-LIMIT-PUBLIC",
+        "INERT-DRAFT-ACTIONS",
+        "FRONTEND-SHAPE-COMPAT"
+      ],
+      "operations": ["AI-01-CHAT", "AI-02-FALLBACK", "AI-03-FRONTEND-LINK"],
+      "routes": ["POST /customer-ai/chat"],
+      "functions": [
+        "chatWithBarista",
+        "callDeepSeek",
+        "searchVisibleProducts",
+        "sanitizeMessage",
+        "assertSafeToolCall",
+        "validateSuggestions",
+        "buildDraftActions",
+        "buildFallbackAnswer",
+        "createChatRateLimiter"
+      ],
+      "tests": [
+        "input bounds",
+        "local fallback",
+        "unknown id drop",
+        "upstream fallback",
+        "no secret leak",
+        "abuse limit",
+        "empty greeting"
+      ],
+      "evidence": {
+        "lint": "passed",
+        "testFiles": 1,
+        "testsPassed": 7,
+        "formatCheck": "passed",
+        "realReplicaSetIntegration": "deferred-environment-unavailable"
+      }
+    },
+    {
+      "id": "BATCH-25",
+      "name": "Ops readiness scripts and contract gate",
+      "status": "VERIFIED",
+      "requirements": [
+        "INDEX-MANIFEST-DIFF",
+        "MIGRATION-LOCK-CHECKSUM",
+        "REFERENCE-SEED-IDEMPOTENT",
+        "FIRST-ADMIN-ONCE",
+        "INTEGRITY-READONLY",
+        "ROUTE-MANIFEST-FROZEN",
+        "AUTH-VALIDATION-HANDLER-GATE",
+        "SECURITY-SWEEP-CLEAN"
+      ],
+      "operations": [
+        "OPS-01-MIGRATE",
+        "OPS-02-INDEXES",
+        "OPS-03-SEED",
+        "OPS-04-ADMIN",
+        "OPS-05-INTEGRITY",
+        "OPS-06-CONTRACT"
+      ],
+      "routes": [
+        "(scripts) migrate",
+        "(scripts) seed",
+        "(scripts) check-indexes",
+        "(scripts) verify-integrity"
+      ],
+      "functions": [
+        "readModelIndexes",
+        "calculateIndexDiff",
+        "computeChecksum",
+        "listPendingMigrations",
+        "acquireMigrationLock",
+        "releaseMigrationLock",
+        "runPendingMigrations",
+        "seedReferenceData",
+        "permissionLabel",
+        "createFirstAdmin",
+        "checkOrderBalances",
+        "checkAssignmentLinks",
+        "checkSessionLinks",
+        "checkAllocationLinks",
+        "checkOutboxHealth",
+        "verifyDataIntegrity",
+        "collectRoutes",
+        "routeViolations"
+      ],
+      "tests": [
+        "manifest per model",
+        "missing indexes",
+        "option drift",
+        "clean manifests",
+        "stable checksums",
+        "migration lock lease",
+        "migration order",
+        "checksum drift",
+        "arabic labels",
+        "seed idempotency",
+        "balance flags",
+        "clean health",
+        "second admin refusal",
+        "args required",
+        "route manifest frozen",
+        "route guards gate"
+      ],
+      "evidence": {
+        "lint": "passed",
+        "testFiles": 2,
+        "testsPassed": 16,
+        "formatCheck": "passed",
+        "realReplicaSetIntegration": "deferred-environment-unavailable"
+      }
+    },
+    {
+      "id": "BATCH-26",
+      "name": "Media live transport and workers",
+      "status": "VERIFIED",
+      "requirements": [
+        "IMAGE-MAGIC-SCAN",
+        "SIGNED-EXPIRING-URLS",
+        "DELETE-IN-USE-GUARD",
+        "PRODUCT-IMAGE-PORT",
+        "SOCKET-SAME-AUTH",
+        "ROOM-FILTERED-SUBSCRIBE",
+        "OUTBOX-PUBLISH-RETRY-BURY",
+        "SHIFT-NOTIFY-DEDUPE",
+        "EXPORT-SWEEP-FAIL",
+        "WORKER-SCHEDULE-STOP"
+      ],
+      "operations": [
+        "MED-01-UPLOAD",
+        "MED-02-LINK",
+        "MED-03-SIGNED-READ",
+        "MED-04-DELETE",
+        "RT-03-SOCKET",
+        "WRK-01-OUTBOX",
+        "WRK-02-SHIFT",
+        "WRK-03-EXPORTS"
+      ],
+      "routes": [
+        "POST /media/uploads",
+        "GET /media",
+        "GET /media/:id",
+        "GET /media/:id/content",
+        "DELETE /media/:id"
+      ],
+      "functions": [
+        "uploadAsset",
+        "assertReadyAsset",
+        "signAssetUrl",
+        "verifyAssetUrl",
+        "deleteAsset",
+        "getAssetContent",
+        "getSignedAsset",
+        "listAssets",
+        "attachSocketTransport",
+        "startWorkers",
+        "tickOutbox",
+        "tickShiftWarnings",
+        "tickReportExports"
+      ],
+      "tests": [
+        "reject bad images",
+        "checksum stored",
+        "signed urls",
+        "ready gating",
+        "delete guard",
+        "product port link",
+        "socket auth reject",
+        "subscribe fanout",
+        "outbox bury",
+        "outbox retry",
+        "shift notify",
+        "export sweep",
+        "worker schedule"
+      ],
+      "evidence": {
+        "lint": "passed",
+        "testFiles": 1,
+        "testsPassed": 13,
+        "formatCheck": "passed",
+        "realReplicaSetIntegration": "deferred-environment-unavailable"
+      }
+    },
+    {
+      "id": "BATCH-27",
+      "name": "Frontend v1 linkage pack",
+      "status": "VERIFIED",
+      "requirements": [
+        "OLD-PATHS-UNTOUCHED",
+        "V1-PATHS-SECTION",
+        "DUAL-SHAPE-CATALOG",
+        "PUBLIC-ORDER-V1-FLOWS",
+        "GUEST-TOKEN-FLOWS",
+        "SYNC-AFTER-RECONNECT",
+        "BOOTSTRAP-SHAPE-COMPAT"
+      ],
+      "operations": [
+        "FE-01-ENDPOINTS",
+        "FE-02-CATALOG",
+        "FE-03-ORDER-GATEWAY",
+        "FE-04-TABLE-GATEWAY",
+        "FE-05-SYNC",
+        "FE-06-BOOTSTRAP"
+      ],
+      "routes": ["(frontend) services only, no backend routes"],
+      "functions": [
+        "getV1Menu",
+        "createV1PublicOrder",
+        "getV1OrderTracking",
+        "lookupV1Order",
+        "bootstrapV1TableGuest",
+        "submitV1TableProposal",
+        "syncAfterReconnect",
+        "bootstrapV1"
+      ],
+      "tests": ["syntax check x7 files", "header contract review", "caller compatibility"],
+      "evidence": {
+        "lint": "passed",
+        "testFiles": 0,
+        "testsPassed": 0,
+        "formatCheck": "passed",
+        "frontendSyntaxCheck": "passed",
+        "realReplicaSetIntegration": "deferred-environment-unavailable"
+      }
+    },
+    {
+      "id": "BATCH-28",
+      "name": "Live Atlas integration gate",
+      "status": "VERIFIED",
+      "requirements": [
+        "ATLAS-CONNECT",
+        "MIGRATE-STATUS-CLEAN",
+        "INDEX-APPLY-VERIFY",
+        "REFERENCE-SEED-LIVE",
+        "INTEGRITY-LIVE-CLEAN",
+        "E2E-TRANSACTIONS-LIVE",
+        "RESTORE-DATE-DEFAULT"
+      ],
+      "operations": [
+        "OPS-05-ATLAS-MIGRATE",
+        "OPS-06-ATLAS-INDEXES",
+        "OPS-07-ATLAS-SEED",
+        "OPS-08-ATLAS-INTEGRITY",
+        "OPS-09-LIVE-E2E"
+      ],
+      "routes": [
+        "(scripts) migrate:status",
+        "(scripts) check-indexes",
+        "(scripts) seed",
+        "(scripts) verify-integrity"
+      ],
+      "functions": [
+        "checkIndexes",
+        "seedReferenceData",
+        "verifyDataIntegrity",
+        "confirmNewOrder",
+        "cancelWholeOrder",
+        "restoreAllocations"
+      ],
+      "tests": ["atlas 11-step lifecycle", "restore date default"],
+      "evidence": {
+        "lint": "passed",
+        "testFiles": 1,
+        "testsPassed": 1,
+        "formatCheck": "passed",
+        "realReplicaSetIntegration": "verified-atlas-2026-09-12"
+      }
+    }
+  ],
+  "coverageGates": {
+    "undocumentedRoutes": null,
+    "unimplementedOperations": null,
+    "uncoveredPublicFunctions": null,
+    "missingPermissions": null,
+    "missingAuditPolicies": null,
+    "schemaIndexDrift": null,
+    "failingContractTests": null
+  }
+}
