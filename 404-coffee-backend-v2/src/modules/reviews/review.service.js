@@ -83,6 +83,7 @@ export async function submitOrderReview(orderId, input, context = {}) {
               fulfillmentType: order.fulfillmentType,
               rating: input.rating,
               comment: input.comment,
+              displayName: input.displayName,
               operationRequestId: context.operationRequestId
             }
           ],

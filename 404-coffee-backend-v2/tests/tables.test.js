@@ -10,7 +10,11 @@ import {
   openTableOrder,
   setTableStatus
 } from '../src/modules/tables/tables.service.js';
-import { getTablesBoard } from '../src/modules/tables/tables.queries.js';
+import {
+  getSessionDetails,
+  getTableDetails,
+  getTablesBoard
+} from '../src/modules/tables/tables.queries.js';
 import { confirmNewOrder } from '../src/modules/orders/order.service.js';
 import { toDecimal128 } from '../src/platform/database/decimal.js';
 
@@ -23,7 +27,12 @@ const infrastructure = () => ({
   requestId: 'test-request',
   sequenceModel: { findOneAndUpdate: async () => ({ value: 2 }) },
   auditModel: { create: async ([v]) => [v] },
-  outboxModel: { create: async ([v]) => [v] }
+  outboxModel: {
+    create: async ([v]) => [v],
+    find: () => ({
+      sort: () => ({ limit: () => ({ session: () => ({ lean: async () => [] }) }) })
+    })
+  }
 });
 const money = (value) => toDecimal128(value);
 const tableDoc = (overrides = {}) => ({
@@ -41,6 +50,7 @@ const sessionDoc = (overrides = {}) => ({
   tableId: id(),
   tableNumber: 5,
   activeOrderId: id(),
+  eventSequence: 1,
   save: vi.fn(),
   ...overrides
 });
@@ -112,7 +122,7 @@ describe('tables and sessions', () => {
       {
         findOne: () => chain(null),
         create: async ([v]) => {
-          storedSession = { _id: id(), version: 0, save: vi.fn(), ...v };
+          storedSession = { _id: id(), version: 0, eventSequence: 0, save: vi.fn(), ...v };
           return [storedSession];
         }
       }
@@ -230,7 +240,10 @@ describe('tables and sessions', () => {
         ...infrastructure(),
         tablesModels: models,
         tablesOrderModels: orderModels(
-          { findOne: () => chain(order) },
+          {
+            findOne: () => chain(order),
+            findById: () => chain(order)
+          },
           { create: async ([v]) => [v] }
         ),
         tablesPaymentsPort: { collect },
@@ -384,5 +397,134 @@ describe('tables and sessions', () => {
     );
     expect(upsertForOrder).not.toHaveBeenCalled();
     expect(result.order.fulfillmentType).toBe('DINE_IN');
+  });
+  it('completes closing on a freshly loaded order after cash collection', async () => {
+    const session = sessionDoc();
+    const stale = dineInOrder({
+      _id: session.activeOrderId,
+      balanceDue: money('120'),
+      save: vi.fn()
+    });
+    const fresh = dineInOrder({
+      _id: session.activeOrderId,
+      version: 1,
+      balanceDue: money('0'),
+      save: vi.fn()
+    });
+    const table = tableDoc({ _id: session.tableId });
+    const collect = vi.fn(async () => ({
+      payment: { _id: id() },
+      drawerTransaction: { _id: id() }
+    }));
+    const finalize = vi.fn(async () => ({ invoice: { _id: id() }, alreadyFinalized: false }));
+    const result = await closeTableSession(
+      session._id,
+      { payment: { method: 'CASH', amount: '120' }, expectedVersion: 0 },
+      {
+        ...infrastructure(),
+        tablesModels: tablesModels(
+          { findById: () => chain(table) },
+          { findOne: () => chain(session) }
+        ),
+        tablesOrderModels: orderModels(
+          {
+            findOne: () => chain(stale),
+            findById: () => chain(fresh)
+          },
+          { create: async ([v]) => [v] }
+        ),
+        tablesPaymentsPort: { collect },
+        tablesInvoicesPort: { finalize }
+      }
+    );
+    expect(result.order).toBe(fresh);
+    expect(fresh.status).toBe('COMPLETED');
+    expect(fresh.save).toHaveBeenCalled();
+    expect(stale.save).not.toHaveBeenCalled();
+  });
+  it('continues session outbox sequences from stored events for legacy sessions', async () => {
+    const session = sessionDoc({ eventSequence: undefined });
+    const order = dineInOrder({ _id: session.activeOrderId, balanceDue: money('0') });
+    const table = tableDoc({ _id: session.tableId });
+    const outbox = [];
+    const result = await closeTableSession(
+      session._id,
+      { expectedVersion: 0 },
+      {
+        ...infrastructure(),
+        outboxModel: {
+          create: async ([v]) => {
+            outbox.push(v);
+            return [v];
+          },
+          find: () => ({
+            sort: () => ({
+              limit: () => ({
+                session: () => ({ lean: async () => [{ sequence: 5 }] })
+              })
+            })
+          })
+        },
+        tablesModels: tablesModels(
+          { findById: () => chain(table) },
+          { findOne: () => chain(session) }
+        ),
+        tablesOrderModels: orderModels(
+          {
+            findOne: () => chain(order),
+            findById: () => chain(order)
+          },
+          { create: async ([v]) => [v] }
+        ),
+        tablesInvoicesPort: {
+          finalize: async () => ({ invoice: { _id: id() }, alreadyFinalized: false })
+        }
+      }
+    );
+    expect(result.session.eventSequence).toBe(6);
+    expect(outbox.filter((v) => v.aggregateType === 'TableSession').map((v) => v.sequence)).toEqual(
+      [6]
+    );
+  });
+  it('exposes the order version in session and table details', async () => {
+    const sessionLean = {
+      _id: id(),
+      version: 0,
+      status: 'OPEN',
+      tableId: id(),
+      tableNumber: 5,
+      activeOrderId: id()
+    };
+    const fullOrder = {
+      _id: sessionLean.activeOrderId,
+      orderNumber: 'ORD-1',
+      status: 'PREPARING',
+      total: money('120'),
+      balanceDue: money('120'),
+      version: 3
+    };
+    const sessionModels = {
+      TableSession: { findById: () => ({ lean: async () => sessionLean }) }
+    };
+    const details = await getSessionDetails(sessionLean._id, {
+      tablesModels: sessionModels,
+      tablesOrderModels: {
+        Order: { findById: () => ({ lean: async () => fullOrder }) },
+        OrderItem: { find: () => ({ sort: () => ({ lean: async () => [] }) }) }
+      }
+    });
+    expect(details.order.version).toBe(3);
+    const tableLean = { _id: sessionLean.tableId, tableNumber: 5, outOfService: false, version: 0 };
+    const tableDetails = await getTableDetails(tableLean._id, {
+      tablesModels: {
+        Table: { findById: () => ({ lean: async () => tableLean }) },
+        TableSession: { findOne: () => ({ lean: async () => sessionLean }) }
+      },
+      tablesOrderModels: {
+        Order: { findById: () => ({ lean: async () => fullOrder }) },
+        OrderItem: { find: () => ({ lean: async () => [] }) }
+      }
+    });
+    expect(tableDetails.order.version).toBe(3);
   });
 });

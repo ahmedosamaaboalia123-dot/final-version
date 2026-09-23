@@ -65,7 +65,10 @@ export async function getEmployeeDetails(employeeId, includes = [], context = {}
       });
     result.attendance = await context.attendancePort.listByEmployee(
       employeeId,
-      { page: 1, limit: 10 },
+      {
+        page: Number(context.attendancePage ?? 1),
+        limit: Number(context.attendanceLimit ?? 10)
+      },
       context
     );
   }
@@ -76,9 +79,11 @@ export async function getEmployeeDetails(employeeId, includes = [], context = {}
         status: 503,
         messageAr: 'سجل الأحداث غير متاح'
       });
+    const activityPage = Number(context.activityPage ?? 1);
+    const activityLimit = Number(context.activityLimit ?? 10);
     result.activity = await context.auditPort.listByActor(
       employeeId,
-      { page: 1, limit: 10 },
+      { page: activityPage, limit: activityLimit },
       context
     );
   }

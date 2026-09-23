@@ -4,7 +4,6 @@ export {
   confirmProposal,
   getCurrentProposal,
   reviewProposal,
-  rotateTableQr,
   submitGuestReview,
   submitProposal,
   GUEST_SESSION_HOURS

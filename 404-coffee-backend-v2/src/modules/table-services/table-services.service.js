@@ -2,6 +2,7 @@ import { nextSequence } from '../../platform/database/sequence.js';
 import { runInTransaction } from '../../platform/database/transaction.js';
 import { writeAudit } from '../../platform/audit/audit-writer.js';
 import { enqueueDomainEvent } from '../../platform/events/outbox-writer.js';
+import { OutboxEvent } from '../../platform/events/outbox-event.model.js';
 import { ApiError } from '../../platform/http/api-error.js';
 import { TableSession } from '../tables/tables.models.js';
 import { TableServiceRequest, TableServiceStatusEvent } from './table-services.models.js';
@@ -9,7 +10,25 @@ import { TableServiceRequest, TableServiceStatusEvent } from './table-services.m
 const defaults = { TableServiceRequest, TableServiceStatusEvent };
 const sessionDefaults = { TableSession };
 
+async function nextServiceSequence(requestId, context) {
+  const model = context.outboxModel ?? OutboxEvent;
+  if (typeof model.find !== 'function') return 1;
+  try {
+    const query = model
+      .find({ aggregateType: 'TableServiceRequest', aggregateId: String(requestId) })
+      .sort({ sequence: -1 })
+      .limit(1);
+    const scoped = context.session && typeof query.session === 'function' ? query.session(context.session) : query;
+    const last = await scoped.lean();
+    return (last[0]?.sequence ?? 0) + 1;
+  } catch {
+    return 1;
+  }
+}
+
 async function record(kind, requestId, payload, context) {
+  const sequence = payload.sequence ?? (await nextServiceSequence(requestId, context));
+  const payloadWithSequence = { ...payload, sequence };
   await writeAudit(
     {
       eventType: kind.toUpperCase().replaceAll('.', '_').replaceAll('-', '_'),
@@ -20,7 +39,7 @@ async function record(kind, requestId, payload, context) {
       entity: { type: 'TableServiceRequest', id: requestId },
       result: 'SUCCESS',
       severity: 'INFO',
-      metadataSafe: payload,
+      metadataSafe: payloadWithSequence,
       requestId: context.requestId
     },
     context
@@ -30,8 +49,8 @@ async function record(kind, requestId, payload, context) {
       aggregateType: 'TableServiceRequest',
       aggregateId: String(requestId),
       eventType: kind,
-      payload,
-      sequence: payload.sequence ?? 1
+      payload: payloadWithSequence,
+      sequence
     },
     context
   );

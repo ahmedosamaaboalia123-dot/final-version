@@ -6,6 +6,7 @@ export const reviewDto = (review) => ({
   fulfillmentType: review.fulfillmentType,
   rating: review.rating,
   comment: review.comment ?? null,
+  displayName: review.displayName ?? null,
   status: review.status,
   submittedAt: review.createdAt ?? null,
   version: review.version ?? 0

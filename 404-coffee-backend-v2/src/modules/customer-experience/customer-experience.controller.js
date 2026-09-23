@@ -17,6 +17,7 @@ const ctx = (r, d) => ({
   ...d.serviceContext,
   actorType: 'CUSTOMER',
   requestId: r.requestId,
+  operationRequestId: r.operationRequestId,
   clientIp: r.ip
 });
 
@@ -30,6 +31,8 @@ export function createCustomerExperienceController(d) {
           publicOrderNumber: result.order.publicOrderNumber,
           status: result.order.status,
           fulfillmentType: result.order.fulfillmentType,
+          version: result.order.version ?? 0,
+          eventSequence: result.order.eventSequence,
           items: result.items.map(itemDto),
           totals: result.totals,
           createdAt: result.order.createdAt
@@ -54,7 +57,11 @@ export function createCustomerExperienceController(d) {
         ctx(r, d)
       );
       return sendSuccess(s, {
-        order: { id: String(result.order._id), status: result.order.status },
+        order: {
+          id: String(result.order._id),
+          status: result.order.status,
+          version: result.order.version ?? 0
+        },
         addedItems: result.addedItems.map(itemDto),
         totals: result.totals,
         progress: result.progress,
@@ -89,6 +96,8 @@ export function createCustomerExperienceController(d) {
           id: String(result.order._id),
           status: result.order.status,
           customerReceiptStatus: result.order.customerReceiptStatus,
+          version: result.order.version ?? 0,
+          eventSequence: result.order.eventSequence,
           completedAt: result.order.updatedAt
         },
         deliveryConfirmation: result.deliveryConfirmation,

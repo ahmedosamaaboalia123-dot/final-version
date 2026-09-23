@@ -7,6 +7,11 @@ const ctx = (r, d) => ({ ...r.auth, ...d.serviceContext });
 
 export function createReviewController(d) {
   return {
+    publicList: async (r, s) =>
+      sendSuccess(
+        s,
+        await listReviews({ ...r.validated.query, status: 'VISIBLE' }, { ...d.serviceContext })
+      ),
     list: async (r, s) => sendSuccess(s, await listReviews(r.validated.query, ctx(r, d))),
     submit: async (r, s) =>
       sendCreated(s, {

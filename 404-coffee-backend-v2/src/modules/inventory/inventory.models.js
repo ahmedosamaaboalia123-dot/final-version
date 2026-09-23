@@ -33,6 +33,7 @@ const materialSchema = new mongoose.Schema(
     supplierLockReason: { type: String, enum: ['FIRST_BATCH', 'RECIPE_USE'], default: null },
     priorityVersion: { type: Number, default: 0 },
     stockVersion: { type: Number, default: 0 },
+    operationRequestId: mongoose.Schema.Types.ObjectId,
     createdBy: mongoose.Schema.Types.ObjectId,
     updatedBy: mongoose.Schema.Types.ObjectId
   },
@@ -40,6 +41,7 @@ const materialSchema = new mongoose.Schema(
 );
 materialSchema.index({ supplierId: 1, name: 1 });
 materialSchema.index({ normalizedName: 1, _id: 1 });
+materialSchema.index({ operationRequestId: 1 }, { unique: true, sparse: true });
 
 const batchSchema = new mongoose.Schema(
   {

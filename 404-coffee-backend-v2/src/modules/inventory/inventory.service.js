@@ -353,7 +353,8 @@ export async function restoreAllocations(allocationIds, reason, context = {}) {
 }
 
 export async function withdrawBatchQuantity(input, context = {}) {
-  return runInTransaction(
+  try {
+    return await runInTransaction(
     async (tx) => {
       const models = context.models ?? defaults;
       const [material, batch] = await Promise.all([
@@ -372,13 +373,16 @@ export async function withdrawBatchQuantity(input, context = {}) {
         });
       const quantitySmall = multiply(input.quantityLarge, material.conversionFactor);
       assertStep(quantitySmall, material.smallQuantityStep);
+      const withdrawalSourceId = context.operationRequestId
+        ? String(context.operationRequestId)
+        : String(new mongoose.Types.ObjectId());
       const result = await consumeFromBatch(
         batch,
         quantitySmall,
         {
           kind: 'WITHDRAWAL',
           type: 'WITHDRAWAL',
-          id: new mongoose.Types.ObjectId(),
+          id: withdrawalSourceId,
           occurredOn: input.occurredOn,
           reason: input.reason
         },
@@ -404,6 +408,39 @@ export async function withdrawBatchQuantity(input, context = {}) {
     context,
     context.transactionOptions
   );
+  } catch (error) {
+    if (error?.code !== 11000 || !context.operationRequestId) throw error;
+    const models = context.models ?? defaults;
+    const replayed = await models.InventoryMovement.findOne({
+      sourceType: 'WITHDRAWAL',
+      sourceId: String(context.operationRequestId)
+    }).lean();
+    if (!replayed)
+      throw new ApiError({
+        code: 'WITHDRAWAL_WRITE_CONFLICT',
+        status: 409,
+        messageAr: 'تعارض في حركة السحب، أعد تحميل الصفحة'
+      });
+    const [material, batch] = await Promise.all([
+      models.RawMaterial.findById(replayed.materialId).lean(),
+      models.RawMaterialBatch.findById(replayed.batchId).lean()
+    ]);
+    return {
+      withdrawal: {
+        id: replayed.sourceId,
+        materialId: String(replayed.materialId),
+        batchId: String(replayed.batchId),
+        quantityLarge: toApiString(replayed.quantitySmall),
+        quantitySmall: toApiString(replayed.quantitySmall),
+        reason: replayed.reason ?? input.reason,
+        occurredOn: replayed.occurredOn
+      },
+      movement: replayed,
+      batch,
+      material: { ...material, stockVersion: material?.stockVersion ?? 0 },
+      replayed: true
+    };
+  }
 }
 
 export async function reorderBatchPriorities(materialId, input, context = {}) {

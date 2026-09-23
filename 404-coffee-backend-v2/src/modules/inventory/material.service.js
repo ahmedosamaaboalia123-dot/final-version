@@ -13,7 +13,8 @@ import { calculateConversionFactor } from './unit.service.js';
 
 const defaults = { MeasurementUnit, RawMaterial };
 export async function createRawMaterial(input, context = {}) {
-  return runInTransaction(
+  try {
+    return await runInTransaction(
     async (tx) => {
       const models = context.models ?? defaults;
       await (context.suppliersPort?.assertSupplierExists ?? assertSupplierExists)(
@@ -48,6 +49,7 @@ export async function createRawMaterial(input, context = {}) {
               ? toDecimal128(input.referenceLargeUnitPrice)
               : undefined,
             minStockSmall: toDecimal128(input.minStockSmall),
+            operationRequestId: context.operationRequestId,
             createdBy: context.actorId
           }
         ],
@@ -58,6 +60,20 @@ export async function createRawMaterial(input, context = {}) {
     context,
     context.transactionOptions
   );
+  } catch (error) {
+    if (error?.code !== 11000 || !context.operationRequestId) throw error;
+    const models = context.models ?? defaults;
+    const replayed = await models.RawMaterial.findOne({
+      operationRequestId: context.operationRequestId
+    }).lean();
+    if (!replayed)
+      throw new ApiError({
+        code: 'MATERIAL_WRITE_CONFLICT',
+        status: 409,
+        messageAr: 'تعارض في إنشاء المادة، أعد تحميل الصفحة'
+      });
+    return { ...replayed, replayed: true };
+  }
 }
 export async function updateRawMaterial(id, input, context = {}) {
   return runInTransaction(

@@ -4,6 +4,7 @@ import {
   adminConfirmDelivery,
   assignDelegate,
   createDelegate,
+  deliverToCustomer,
   handoverAssignment,
   reassignDelivery,
   recordFailedAttempt,
@@ -84,6 +85,14 @@ export function createDeliveryController(d) {
     override: async (r, s) => {
       const result = await adminConfirmDelivery(r.validated.params.id, r.validated.body, ctx(r, d));
       return sendSuccess(s, {
+        order: { id: String(result.order._id), status: result.order.status },
+        confirmation: { id: String(result.confirmation._id), source: result.confirmation.source }
+      });
+    },
+    deliver: async (r, s) => {
+      const result = await deliverToCustomer(r.validated.params.id, r.validated.body, ctx(r, d));
+      return sendSuccess(s, {
+        assignment: assignmentDto(result.assignment),
         order: { id: String(result.order._id), status: result.order.status },
         confirmation: { id: String(result.confirmation._id), source: result.confirmation.source }
       });

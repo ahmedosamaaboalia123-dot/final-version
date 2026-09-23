@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { employeeAuth } from '../../platform/auth/employee-auth.middleware.js';
 import { requirePermission } from '../../platform/auth/permission.middleware.js';
 import { asyncHandler } from '../../platform/http/async-handler.js';
+import { idempotentAsyncHandler } from '../../platform/http/idempotent-handler.js';
 import { validate } from '../../platform/http/validate.middleware.js';
 import { AUTH_PERMISSIONS } from '../../shared/constants/auth.constants.js';
 import { createInvoiceController } from './invoice.controller.js';
@@ -32,7 +33,7 @@ export function createInvoiceRouter(d) {
     '/invoices/:id/print-events',
     requirePermission(AUTH_PERMISSIONS.INVOICES_PRINT),
     validate({ params: idParams }),
-    asyncHandler(c.printEvent)
+    idempotentAsyncHandler('invoices.print-event', c.printEvent)
   );
   r.get(
     '/orders/:id/invoice-preview',
@@ -44,7 +45,7 @@ export function createInvoiceRouter(d) {
     '/orders/:id/invoice-finalize',
     requirePermission(AUTH_PERMISSIONS.INVOICES_PRINT),
     validate({ params: idParams }),
-    asyncHandler(c.finalize)
+    idempotentAsyncHandler('invoices.finalize', c.finalize)
   );
   return r;
 }

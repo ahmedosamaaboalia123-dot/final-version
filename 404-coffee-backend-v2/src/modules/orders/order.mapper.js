@@ -7,7 +7,7 @@ export const orderDto = (order) => ({
   barcodeValue: order.barcodeValue ?? null,
   fulfillmentType: order.fulfillmentType,
   channel: order.channel,
-  customer: { name: order.customerName, phone: order.customerPhone },
+  customer: { name: order.customerName, phone: order.customerPhone, address: order.customerAddress ?? null },
   status: order.status,
   totals: {
     subtotal: toApiString(order.subtotal),
@@ -21,6 +21,7 @@ export const orderDto = (order) => ({
   balanceDue: toApiString(order.balanceDue),
   paymentStatus: order.paymentStatus,
   customerReceiptStatus: order.customerReceiptStatus,
+  assignedDelegateId: order.assignedDelegateId ? String(order.assignedDelegateId) : null,
   costCompleteness: order.costCompleteness,
   eventSequence: order.eventSequence,
   createdAt: order.createdAt ?? null,

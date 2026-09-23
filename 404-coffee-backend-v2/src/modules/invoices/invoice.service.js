@@ -22,6 +22,16 @@ export function calculateInvoiceChecksum(payload) {
     .update(JSON.stringify(canonical(payload)))
     .digest('hex');
 }
+const MONEY_STRING = /^-?\d+(\.\d{1,2})?$/;
+function assertDecimalTotals(totals) {
+  const values = [totals?.subtotal, totals?.discount, totals?.tax, totals?.deliveryFee, totals?.total];
+  if (!totals || values.some((value) => typeof value !== 'string' || !MONEY_STRING.test(value)))
+    throw new ApiError({
+      code: 'INVALID_INVOICE_TOTALS',
+      status: 422,
+      messageAr: 'إجماليات الفاتورة غير صالحة'
+    });
+}
 function orders(context) {
   if (!context.ordersPort?.getInvoicePayload)
     throw new ApiError({
@@ -57,23 +67,32 @@ export async function finalizeInvoice(orderId, context = {}) {
         });
       const sequence = await nextSequence('invoice', { ...context, ...tx });
       const checksum = calculateInvoiceChecksum(payload);
-      const [invoice] = await model.create(
-        [
-          {
-            invoiceNumber: `INV-${String(sequence).padStart(8, '0')}`,
-            orderId,
-            tableSessionId: payload.order.tableSessionId,
-            revision: payload.order.invoiceRevision ?? 1,
-            channel: payload.order.channel,
-            fulfillmentType: payload.order.fulfillmentType,
-            payloadSafe: payload,
-            totals: payload.totals,
-            finalizedBy: context.actorId,
-            checksum
-          }
-        ],
-        { session: tx.session }
-      );
+      assertDecimalTotals(payload.totals);
+      let invoice;
+      try {
+        [invoice] = await model.create(
+          [
+            {
+              invoiceNumber: `INV-${String(sequence).padStart(8, '0')}`,
+              orderId,
+              tableSessionId: payload.order.tableSessionId,
+              revision: payload.order.invoiceRevision ?? 1,
+              channel: payload.order.channel,
+              fulfillmentType: payload.order.fulfillmentType,
+              payloadSafe: payload,
+              totals: payload.totals,
+              finalizedBy: context.actorId,
+              checksum
+            }
+          ],
+          { session: tx.session }
+        );
+      } catch (error) {
+        if (error?.code !== 11000) throw error;
+        const raced = await model.findOne({ orderId }).session(tx.session);
+        if (!raced) throw error;
+        return { invoice: raced, alreadyFinalized: true };
+      }
       await writeAudit(
         {
           eventType: 'INVOICE_FINALIZED',

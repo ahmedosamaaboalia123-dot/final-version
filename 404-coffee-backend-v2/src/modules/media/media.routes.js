@@ -25,7 +25,7 @@ function handleMulterUpload(req, res, next) {
   });
 }
 
-export function createMediaRouter(d) {
+export function createPublicMediaRouter(d) {
   const r = Router(),
     c = createMediaController(d);
   r.get(
@@ -33,6 +33,12 @@ export function createMediaRouter(d) {
     validate({ params: idParams, query: contentQuery }),
     asyncHandler(c.content)
   );
+  return r;
+}
+
+export function createMediaRouter(d) {
+  const r = Router(),
+    c = createMediaController(d);
   r.use(employeeAuth(d.config, d.authDependencies));
   r.post(
     '/media/uploads',

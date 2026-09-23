@@ -282,6 +282,43 @@ describe('cash payments and final invoice contracts', () => {
     expect(create).not.toHaveBeenCalled();
     expect(getPayload).not.toHaveBeenCalled();
   });
+  it('survives a concurrent finalize race via the order unique index', async () => {
+    const orderId = id(),
+      raced = { _id: id(), invoiceNumber: 'INV-00000002' },
+      duplicate = Object.assign(new Error('duplicate'), { code: 11000 });
+    const result = await finalizeInvoice(orderId, {
+      ...infrastructure(),
+      invoiceModel: {
+        findOne: vi.fn().mockReturnValueOnce(chain(null)).mockReturnValueOnce(chain(raced)),
+        create: async () => {
+          throw duplicate;
+        }
+      },
+      ordersPort: {
+        getInvoicePayload: async () => ({
+          order: { status: 'COMPLETED' },
+          totals: { subtotal: '100', discount: '0', tax: '0', deliveryFee: '0', total: '100' }
+        })
+      }
+    });
+    expect(result.invoice).toBe(raced);
+    expect(result.alreadyFinalized).toBe(true);
+  });
+  it('rejects non-decimal invoice totals', async () => {
+    const orderId = id();
+    await expect(
+      finalizeInvoice(orderId, {
+        ...infrastructure(),
+        invoiceModel: { findOne: () => chain(null), create: vi.fn() },
+        ordersPort: {
+          getInvoicePayload: async () => ({
+            order: { status: 'COMPLETED' },
+            totals: { subtotal: 100, discount: '0', tax: '0', deliveryFee: '0', total: '100' }
+          })
+        }
+      })
+    ).rejects.toMatchObject({ code: 'INVALID_INVOICE_TOTALS', status: 422 });
+  });
   it('records invoice prints as a counter without changing financial totals', async () => {
     const invoiceId = id(),
       printed = {

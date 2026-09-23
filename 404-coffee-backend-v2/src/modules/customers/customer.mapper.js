@@ -10,5 +10,6 @@ export const customerDto = (customer) => ({
   completedOrderCount: customer.completedOrderCount,
   lifetimeValue: toApiString(customer.lifetimeValue ?? '0'),
   lastOrderAt: customer.lastOrderAt ?? null,
+  socialLinks: Array.isArray(customer.socialLinks) ? customer.socialLinks : [],
   version: customer.version ?? 0
 });

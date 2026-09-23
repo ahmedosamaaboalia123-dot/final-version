@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { employeeAuth } from '../../platform/auth/employee-auth.middleware.js';
 import { requirePermission } from '../../platform/auth/permission.middleware.js';
 import { asyncHandler } from '../../platform/http/async-handler.js';
+import { idempotentAsyncHandler } from '../../platform/http/idempotent-handler.js';
 import { validate } from '../../platform/http/validate.middleware.js';
 import { AUTH_PERMISSIONS } from '../../shared/constants/auth.constants.js';
 import { createPurchaseReturnController } from './purchase-return.controller.js';
@@ -20,7 +21,7 @@ export function createPurchaseReturnRouter(d) {
     '/purchase-returns',
     requirePermission(AUTH_PERMISSIONS.PURCHASE_RETURNS_CREATE),
     validate({ body: createReturnBody }),
-    asyncHandler(c.create)
+    idempotentAsyncHandler('purchase-returns.create', c.create)
   );
   r.get(
     '/purchase-returns/:id',

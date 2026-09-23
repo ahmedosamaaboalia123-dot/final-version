@@ -157,11 +157,15 @@ describe('purchase return execution', () => {
         }
       ]
     };
+    const auditCreate = vi.fn(async ([value]) => [value]);
+    const outboxCreate = vi.fn(async ([value]) => [value]);
     const result = await createPurchaseReturn(input, {
       session: {},
       actorId: id(),
       returnModels: models,
-      sequenceModel: sequenceModel()
+      sequenceModel: sequenceModel(),
+      auditModel: { create: auditCreate },
+      outboxModel: { create: outboxCreate }
     });
     expect(toApiString(batch.remainingQuantitySmall)).toBe('0');
     expect(toApiString(batch.remainingInventoryValue)).toBe('0');
@@ -170,12 +174,18 @@ describe('purchase return execution', () => {
     expect(result.return.totalInventoryValue.toString()).toBe('300');
     expect(headers).toHaveLength(1);
     expect(returnItems).toHaveLength(1);
+    expect(auditCreate).toHaveBeenCalledTimes(1);
+    expect(auditCreate.mock.calls[0][0].eventType).toBe('PURCHASE_RETURN_CREATED');
+    expect(outboxCreate).toHaveBeenCalledTimes(1);
+    expect(outboxCreate.mock.calls[0][0].eventType).toBe('purchase-return.created');
     await expect(
       createPurchaseReturn(input, {
         session: {},
         actorId: id(),
         returnModels: models,
-        sequenceModel: sequenceModel()
+        sequenceModel: sequenceModel(),
+        auditModel: { create: async ([value]) => [value] },
+        outboxModel: { create: async ([value]) => [value] }
       })
     ).rejects.toMatchObject({ code: 'RETURN_BATCH_VERSION_CONFLICT' });
     expect(headers).toHaveLength(1);

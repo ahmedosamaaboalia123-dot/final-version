@@ -14,6 +14,7 @@ import { listMeasurementUnits } from './unit.service.js';
 const contextFrom = (req, dependencies) => ({
   ...req.auth,
   businessDate: DateTime.now().setZone('Africa/Cairo').toISODate(),
+  operationRequestId: req.operationRequestId,
   ...dependencies.serviceContext
 });
 export function createInventoryController(dependencies) {

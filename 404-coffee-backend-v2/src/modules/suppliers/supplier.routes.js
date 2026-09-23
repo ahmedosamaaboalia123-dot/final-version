@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { employeeAuth } from '../../platform/auth/employee-auth.middleware.js';
 import { requirePermission } from '../../platform/auth/permission.middleware.js';
 import { asyncHandler } from '../../platform/http/async-handler.js';
+import { idempotentAsyncHandler } from '../../platform/http/idempotent-handler.js';
 import { validate } from '../../platform/http/validate.middleware.js';
 import { AUTH_PERMISSIONS } from '../../shared/constants/auth.constants.js';
 import { createSupplierController } from './supplier.controller.js';
@@ -32,7 +33,7 @@ export function createSupplierRouter(dependencies) {
     '/suppliers',
     requirePermission(AUTH_PERMISSIONS.SUPPLIERS_CREATE),
     validate({ body: createSupplierBody }),
-    asyncHandler(controller.create)
+    idempotentAsyncHandler('suppliers.create', controller.create)
   );
   router.get(
     '/suppliers/:id',
@@ -46,15 +47,15 @@ export function createSupplierRouter(dependencies) {
     validate({ params: supplierIdParams, body: updateSupplierBody }),
     asyncHandler(controller.update)
   );
-  router.delete('/suppliers/:id', requirePermission(AUTH_PERMISSIONS.SUPPLIERS_UPDATE), validate({ params: supplierIdParams, body: deleteSupplierBody }), asyncHandler(controller.deleteSupplier));
+  router.delete('/suppliers/:id', requirePermission(AUTH_PERMISSIONS.SUPPLIERS_UPDATE), validate({ params: supplierIdParams, body: deleteSupplierBody }), idempotentAsyncHandler('suppliers.delete', controller.deleteSupplier));
   router.post(
     '/suppliers/:id/account-entries',
     requirePermission(AUTH_PERMISSIONS.SUPPLIERS_ACCOUNT_WRITE),
     validate({ params: supplierIdParams, body: createEntryBody }),
-    asyncHandler(controller.createEntry)
+    idempotentAsyncHandler('suppliers.entry', controller.createEntry)
   );
   router.patch('/supplier-account-entries/:id', requirePermission(AUTH_PERMISSIONS.SUPPLIERS_ACCOUNT_WRITE), validate({ params: supplierIdParams, body: updateEntryBody }), asyncHandler(controller.updateEntry));
-  router.delete('/supplier-account-entries/:id', requirePermission(AUTH_PERMISSIONS.SUPPLIERS_ACCOUNT_REVERSE), validate({ params: supplierIdParams, body: deleteEntryBody }), asyncHandler(controller.deleteEntry));
+  router.delete('/supplier-account-entries/:id', requirePermission(AUTH_PERMISSIONS.SUPPLIERS_ACCOUNT_REVERSE), validate({ params: supplierIdParams, body: deleteEntryBody }), idempotentAsyncHandler('suppliers.delete-entry', controller.deleteEntry));
   router.get(
     '/suppliers/:id/account-entries',
     requirePermission(AUTH_PERMISSIONS.SUPPLIERS_READ),
@@ -65,7 +66,7 @@ export function createSupplierRouter(dependencies) {
     '/supplier-account-entries/:id/reverse',
     requirePermission(AUTH_PERMISSIONS.SUPPLIERS_ACCOUNT_REVERSE),
     validate({ params: supplierIdParams, body: reverseEntryBody }),
-    asyncHandler(controller.reverse)
+    idempotentAsyncHandler('suppliers.reverse', controller.reverse)
   );
   return router;
 }

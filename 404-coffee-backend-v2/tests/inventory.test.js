@@ -8,6 +8,7 @@ import {
   simulateRecipeRequirements,
   withdrawBatchQuantity
 } from '../src/modules/inventory/inventory.service.js';
+import { createRawMaterial } from '../src/modules/inventory/material.service.js';
 import { calculateConversionFactor } from '../src/modules/inventory/unit.service.js';
 
 const chain = (value) => ({
@@ -288,5 +289,31 @@ describe('inventory consumption and restoration', () => {
         { session: {}, models }
       )
     ).rejects.toMatchObject({ code: 'BATCH_VERSION_CONFLICT', status: 409 });
+  });
+});
+
+describe('material creation idempotency', () => {
+  it('replays a duplicate material write for the same operation key', async () => {
+    const opId = new mongoose.Types.ObjectId();
+    const supplierId = new mongoose.Types.ObjectId();
+    const largeId = new mongoose.Types.ObjectId();
+    const smallId = new mongoose.Types.ObjectId();
+    const stored = { _id: new mongoose.Types.ObjectId(), name: '???' };
+    let creates = 0;
+    const models = {
+      MeasurementUnit: { findById: (value) => chain(String(value) === String(largeId) ? { _id: largeId, kind: 'MASS', physicalFactor: toDecimal128('1000'), isActive: true } : { _id: smallId, kind: 'MASS', physicalFactor: toDecimal128('1'), isActive: true }) },
+      RawMaterial: {
+        create: async ([value]) => { creates += 1; if (creates > 1) throw Object.assign(new Error('duplicate'), { code: 11000 }); return [{ ...value, _id: new mongoose.Types.ObjectId() }]; },
+        findOne: () => ({ lean: async () => stored })
+      }
+    };
+    const context = { session: {}, actorType: 'EMPLOYEE', actorId: new mongoose.Types.ObjectId(), requestId: 'request-1', operationRequestId: opId, models, supplierModels: { Supplier: { findById: () => chain({ _id: supplierId }) } } };
+    const input = { name: '???', supplierId: String(supplierId), largeUnitId: String(largeId), smallUnitId: String(smallId), conversionFactor: '1000', smallQuantityStep: '1', minStockSmall: '0' };
+    const first = await createRawMaterial(input, context);
+    expect(first.name).toBe('???');
+    const replay = await createRawMaterial(input, context);
+    expect(replay.replayed).toBe(true);
+    expect(String(replay._id)).toBe(String(stored._id));
+    expect(creates).toBe(2);
   });
 });

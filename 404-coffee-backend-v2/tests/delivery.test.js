@@ -2,10 +2,12 @@ import mongoose from 'mongoose';
 import { describe, expect, it, vi } from 'vitest';
 import { createDelegateBody } from '../src/modules/delivery/delivery.validation.js';
 import {
+  CUSTOMER_DELIVERY_REASON,
   adminConfirmDelivery,
   assignDelegate,
   confirmDeliveryReceipt,
   createDelegate,
+  deliverToCustomer,
   handoverAssignment,
   reassignDelivery,
   recordFailedAttempt,
@@ -24,7 +26,12 @@ const infrastructure = () => ({
   requestId: 'test-request',
   sequenceModel: { findOneAndUpdate: async () => ({ value: 3 }) },
   auditModel: { create: async ([v]) => [v] },
-  outboxModel: { create: async ([v]) => [v] }
+  outboxModel: {
+    create: async ([v]) => [v],
+    find: () => ({
+      sort: () => ({ limit: () => ({ session: () => ({ lean: async () => [] }) }) })
+    })
+  }
 });
 const money = (value) => toDecimal128(value);
 const delegateDoc = (overrides = {}) => ({
@@ -319,6 +326,111 @@ describe('delegates and delivery', () => {
     expect(finalize).toHaveBeenCalledTimes(1);
     expect(recordCompletion).toHaveBeenCalledTimes(1);
   });
+  it('delivers to the customer in one step from an assigned handover', async () => {
+    const delegate = delegateDoc({ activeOrderCount: 1 });
+    const order = {
+      ...readyOrder(),
+      status: 'READY',
+      customerReceiptStatus: 'LOCKED',
+      customerId: id(),
+      total: money('80'),
+      subtotal: money('80')
+    };
+    order.save = vi.fn();
+    const assignment = assignmentDoc({ orderId: order._id, status: 'ASSIGNED' });
+    order.currentDeliveryAssignmentId = assignment._id;
+    let storedConfirmation;
+    const finalize = vi.fn(async () => ({ invoice: { _id: id() }, alreadyFinalized: false }));
+    const recordCompletion = vi.fn(async () => ({}));
+    const context = {
+      ...modelsFor(
+        {
+          Delegate: { findById: () => chain(delegate) },
+          DeliveryAssignment: {
+            findOne: () => chain(assignment),
+            findById: () => chain(assignment)
+          },
+          DeliveryConfirmation: {
+            create: async ([v]) => {
+              storedConfirmation = { _id: id(), ...v };
+              return [storedConfirmation];
+            }
+          }
+        },
+        {
+          Order: {
+            findOne: () => chain(order),
+            findById: () => chain(order)
+          },
+          OrderStatusEvent: { create: async ([v]) => [v] }
+        }
+      ),
+      invoicesPort: { finalize },
+      customersPort: { recordCompletion }
+    };
+    const result = await deliverToCustomer(assignment._id, { expectedVersion: 0 }, context);
+    expect(result.order.status).toBe('COMPLETED');
+    expect(result.order.customerReceiptStatus).toBe('ADMIN_CONFIRMED');
+    expect(result.assignment.status).toBe('DELIVERED');
+    expect(storedConfirmation.source).toBe('ADMIN_OVERRIDE');
+    expect(storedConfirmation.overrideReason).toBe(CUSTOMER_DELIVERY_REASON);
+    expect(delegate.activeOrderCount).toBe(0);
+    expect(delegate.deliveredCount).toBe(1);
+    expect(finalize).toHaveBeenCalledTimes(1);
+    expect(recordCompletion).toHaveBeenCalledTimes(1);
+  });
+  it('delivers to the customer directly from an in-progress handover', async () => {
+    const delegate = delegateDoc({ activeOrderCount: 1 });
+    const order = {
+      ...readyOrder(),
+      status: 'OUT_FOR_DELIVERY',
+      customerReceiptStatus: 'AVAILABLE',
+      customerId: id(),
+      total: money('80'),
+      subtotal: money('80')
+    };
+    order.save = vi.fn();
+    const assignment = assignmentDoc({ orderId: order._id, status: 'IN_PROGRESS' });
+    order.currentDeliveryAssignmentId = assignment._id;
+    const finalize = vi.fn(async () => ({ invoice: { _id: id() }, alreadyFinalized: false }));
+    const context = {
+      ...modelsFor(
+        {
+          Delegate: { findById: () => chain(delegate) },
+          DeliveryAssignment: {
+            findOne: () => chain(assignment),
+            findById: () => chain(assignment)
+          },
+          DeliveryConfirmation: { create: async ([v]) => [{ _id: id(), ...v }] }
+        },
+        {
+          Order: {
+            findOne: () => chain(order),
+            findById: () => chain(order)
+          },
+          OrderStatusEvent: { create: async ([v]) => [v] }
+        }
+      ),
+      invoicesPort: { finalize }
+    };
+    const result = await deliverToCustomer(assignment._id, { expectedVersion: 0 }, context);
+    expect(result.order.status).toBe('COMPLETED');
+    expect(result.assignment.status).toBe('DELIVERED');
+    expect(finalize).toHaveBeenCalledTimes(1);
+  });
+  it('rejects customer delivery for settled or stale assignments', async () => {
+    await expect(
+      deliverToCustomer(
+        id(),
+        { expectedVersion: 0 },
+        {
+          ...infrastructure(),
+          deliveryModels: { DeliveryAssignment: { findOne: () => chain(null) } },
+          deliveryOrderModels: {}
+        }
+      )
+    ).rejects.toMatchObject({ code: 'ASSIGNMENT_DELIVER_CONFLICT' });
+  });
   it('requires a reason for admin overrides', async () => {
     await expect(
       confirmDeliveryReceipt(
@@ -377,7 +489,7 @@ describe('delegates and delivery', () => {
     const assignment = assignmentDoc({ status: 'IN_PROGRESS' });
     const context = modelsFor({
       Delegate: {},
-      DeliveryAssignment: { findOne: async () => assignment }
+      DeliveryAssignment: { findOne: () => chain(assignment) }
     });
     const result = await recordWhatsappShare(assignment._id, { expectedVersion: 0 }, context);
     expect(result).toMatchObject({ recorded: true, assignmentId: String(assignment._id) });

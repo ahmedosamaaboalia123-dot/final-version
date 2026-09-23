@@ -192,8 +192,14 @@
 كل قرار جديد يأخذ رقمًا، وحالة، وسببًا، وأثرًا على Schema/API/اختبارات. لا يُستخدم الملف لاستبدال متطلب واضح دون تسجيل التعارض.
 
 ## D-028 - Admin role bypasses device approval
-
 - Context: owner request; admin locked out by device-approval UX on every new device.
 - Decision: in auth.service login(), an employee whose role name is 'Admin' (or level >= 100) gets new devices created APPROVED and existing PENDING devices upgraded to APPROVED, then login completes 200 with tokens.
 - Scope: Admin role only. All other roles keep PENDING/BLOCKED flow, refresh still revokes non-approved sessions, audit attempts still recorded.
 - Risk accepted: password-only trust for admin devices. Revisit with env flag if needed.
+
+## D-029 - One-step customer delivery from the delegates section
+
+- Context: owner request; the handover/receipt two-step flow is too slow for daily operation.
+- Decision: new atomic operation `deliverToCustomer` (`POST /delivery-assignments/:id/deliver-to-customer`, permission `DELIVERY_MANAGE`) accepts an `ASSIGNED` or `IN_PROGRESS` assignment with a single `expectedVersion`, performs the handover automatically when needed, then confirms receipt as `ADMIN_OVERRIDE` with the fixed reason `CUSTOMER_DELIVERY_REASON`. The order becomes `COMPLETED` with a final invoice in the same transaction.
+- Frontend: the delegates section shows one button (تأكيد الاستلام) instead of the handover and admin-override buttons. Reassign/failed/returned/settle flows are unchanged. The customer tracking screen needs no change (the receive action hides itself once the order is `COMPLETED`).
+- Risk accepted: no real customer receipt proof afterward; management asserts delivery by the click. Cancellation after delivery stays rejected like any completed order.

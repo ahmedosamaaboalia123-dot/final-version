@@ -5,8 +5,6 @@ const version = z.number().int().min(0);
 
 export const idParams = z.object({ id }).strict();
 
-export const rotateQrBody = z.object({ expectedVersion: version }).strict();
-
 const orderInputItem = z
   .object({
     productId: id,

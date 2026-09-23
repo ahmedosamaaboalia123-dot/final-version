@@ -5,6 +5,7 @@ import { enqueueDomainEvent } from '../../platform/events/outbox-writer.js';
 import { ApiError } from '../../platform/http/api-error.js';
 import { createOpaqueToken, hashToken } from '../../shared/utils/hash-token.js';
 import { normalizePhone } from '../../shared/utils/normalize-phone.js';
+import { nextSequence } from '../../platform/database/sequence.js';
 import { Order, OrderItem, OrderStatusEvent } from '../orders/order.models.js';
 import {
   confirmNewOrder,
@@ -43,6 +44,7 @@ export function maskPhone(phone) {
 }
 
 async function record(kind, entityId, payload, context) {
+  const sequence = await nextSequence(`customer-order-experience:${entityId}`, context);
   await writeAudit(
     {
       eventType: kind.toUpperCase().replaceAll('.', '_').replaceAll('-', '_'),
@@ -60,11 +62,11 @@ async function record(kind, entityId, payload, context) {
   );
   await enqueueDomainEvent(
     {
-      aggregateType: 'CustomerOrder',
+      aggregateType: 'CustomerOrderExperience',
       aggregateId: String(entityId),
       eventType: kind,
       payload,
-      sequence: payload.sequence ?? 1
+      sequence
     },
     context
   );
@@ -252,6 +254,7 @@ export async function submitPublicReview(order, input, context = {}) {
     {
       rating: input.rating,
       comment: input.comment,
+      displayName: input.displayName,
       expectedOrderVersion: input.expectedOrderVersion
     },
     context
@@ -315,12 +318,18 @@ export async function getCustomerOrderHistory(customerId, filters = {}, context 
     items.map(async (item) => {
       const { review } = await readReview(item.id, context);
       return {
+        id: item.id,
         orderNumber: item.orderNumber,
+        publicOrderNumber: item.publicOrderNumber,
         barcodeValue: item.barcodeValue,
         fulfillmentType: item.fulfillmentType,
         status: item.status,
         total: item.totals.total,
         createdAt: item.createdAt,
+        version: item.version,
+        eventSequence: item.eventSequence,
+        customerReceiptStatus: item.customerReceiptStatus,
+        paymentStatus: item.paymentStatus,
         reviewStatus: review ? 'SUBMITTED' : 'NONE'
       };
     })

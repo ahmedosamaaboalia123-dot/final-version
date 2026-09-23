@@ -6,7 +6,6 @@ import {
   cancelProposal,
   confirmProposal,
   reviewProposal,
-  rotateTableQr,
   submitGuestReview,
   submitProposal
 } from '../src/modules/table-experience/table-experience.service.js';
@@ -70,29 +69,15 @@ const proposalInput = () => ({
 });
 
 describe('table guest experience', () => {
-  it('rejects bootstrap with a wrong qr secret', async () => {
-    const table = tableDoc();
-    await expect(
-      bootstrapGuestSession(
-        { tableNumber: 5, qrSecret: 'wrong-secret-value-0123456789' },
-        {
-          ...infrastructure(),
-          tableGuestModels: {
-            Table: { findOne: () => ({ select: () => table }) }
-          }
-        }
-      )
-    ).rejects.toMatchObject({ code: 'TABLE_QR_INVALID' });
-  });
-  it('bootstraps a guest session with a single-use token', async () => {
+  it('bootstraps a guest session without a qr secret', async () => {
     const table = tableDoc();
     let stored;
     const result = await bootstrapGuestSession(
-      { tableNumber: 5, qrSecret: QR },
+      { tableNumber: 5 },
       {
         ...infrastructure(),
         tableGuestModels: {
-          Table: { findOne: () => ({ select: () => table }) },
+          Table: { findOne: async () => table },
           TableGuestSession: {
             create: async ([v]) => {
               stored = { _id: id(), ...v };
@@ -106,24 +91,6 @@ describe('table guest experience', () => {
     expect(result.tableToken).toBeDefined();
     expect(stored.tokenHash).toBe(hashToken(result.tableToken));
     expect(stored.qrVersion).toBe(1);
-  });
-  it('rotates qr secrets and revokes live guest sessions', async () => {
-    const table = tableDoc();
-    const updateMany = vi.fn(async () => ({}));
-    const result = await rotateTableQr(
-      table._id,
-      { expectedVersion: 0 },
-      {
-        ...infrastructure(),
-        tableGuestModels: {
-          Table: { findOne: () => chain(table) },
-          TableGuestSession: { updateMany }
-        }
-      }
-    );
-    expect(result.qrVersion).toBe(2);
-    expect(table.currentQrSecretHash).toBe(hashToken(result.qrSecret));
-    expect(updateMany).toHaveBeenCalledTimes(1);
   });
   it('stores proposals as snapshots without touching orders or stock', async () => {
     const guest = guestDoc();

@@ -12,6 +12,10 @@ import {
   markOrderItemReady
 } from '../src/modules/orders/order.service.js';
 import { toDecimal128 } from '../src/platform/database/decimal.js';
+import { orderDto } from '../src/modules/orders/order.mapper.js';
+import { getOrderDetails, getOrdersOnlineScreen } from '../src/modules/orders/order.queries.js';
+import { calculateOrderTotals } from '../src/modules/orders/order-pricing.service.js';
+import { mapMongoError } from '../src/platform/http/error-handler.js';
 
 const id = () => new mongoose.Types.ObjectId(),
   chain = (value) => ({ session: async () => value });
@@ -70,6 +74,66 @@ const confirmInput = () => ({
 });
 
 describe('admin orders lifecycle', () => {
+  it('calculates tax and delivery totals with decimal arithmetic', () => {
+    expect(
+      calculateOrderTotals([{ lineSubtotal: '199.99' }], 'DELIVERY', {
+        taxRate: '0.14',
+        deliveryFee: '20'
+      })
+    ).toEqual({
+      subtotal: '199.99',
+      discount: '0',
+      tax: '28',
+      deliveryFee: '20',
+      total: '247.99'
+    });
+  });
+  it('maps optimistic concurrency collisions to a retryable 409 response', () => {
+    const mapped = mapMongoError({ name: 'VersionError' });
+    expect(mapped).toMatchObject({ code: 'VERSION_CONFLICT', status: 409, retryable: true });
+  });
+  it('exposes customer identity including address on the order dto', () => {
+    const dto = orderDto({
+      _id: id(),
+      orderNumber: 'ORD-00000007',
+      publicOrderNumber: 'ORD-00000007',
+      fulfillmentType: 'DELIVERY',
+      channel: 'CUSTOMER_WEB',
+      customerName: 'عميل اختبار',
+      customerPhone: '01001234567',
+      customerAddress: 'شارع الجمهورية، مبنى 5',
+      status: 'CONFIRMED',
+      subtotal: money('100'),
+      discount: money('0'),
+      tax: money('0'),
+      deliveryFee: money('0'),
+      total: money('100'),
+      actualInventoryCost: money('0'),
+      actualProfit: money('0'),
+      balanceDue: money('100'),
+      version: 0
+    });
+    expect(dto.customer).toMatchObject({
+      name: 'عميل اختبار',
+      phone: '01001234567',
+      address: 'شارع الجمهورية، مبنى 5'
+    });
+    expect(
+      orderDto({
+        _id: id(),
+        customerName: 'x',
+        customerPhone: 'y',
+        subtotal: money('0'),
+        discount: money('0'),
+        tax: money('0'),
+        deliveryFee: money('0'),
+        total: money('0'),
+        actualInventoryCost: money('0'),
+        actualProfit: money('0'),
+        balanceDue: money('0')
+      }).customer.address
+    ).toBeNull();
+  });
   it('rejects empty carts and dine-in without a table session', () => {
     expect(confirmBody.safeParse({ ...confirmInput(), items: [] }).success).toBe(false);
     expect(confirmBody.safeParse({ ...confirmInput(), fulfillmentType: 'DINE_IN' }).success).toBe(
@@ -174,6 +238,53 @@ describe('admin orders lifecycle', () => {
     expect(result.order.status).toBe('PREPARING');
     expect(result.progress.total).toBe(2);
   });
+  it('recalculates tax, total, balance, cost and profit after appending items', async () => {
+    const order = orderDoc({
+      status: 'CONFIRMED',
+      subtotal: money('100'),
+      discount: money('0'),
+      tax: money('14'),
+      taxRateSnapshot: money('0.14'),
+      deliveryFee: money('20'),
+      total: money('134'),
+      balanceDue: money('134')
+    });
+    const existing = itemDoc({
+      status: 'PREPARING',
+      lineSubtotal: money('100'),
+      actualInventoryCost: money('40')
+    });
+    const added = itemDoc({
+      status: 'PREPARING',
+      lineSubtotal: money('120'),
+      actualInventoryCost: money('60')
+    });
+    const models = {
+      Order: { findOne: () => chain(order) },
+      OrderItem: {
+        countDocuments: () => chain(1),
+        create: async ([v]) => [{ ...added, ...v, save: added.save }],
+        find: () => chain([existing, added])
+      },
+      OrderStatusEvent: { create: async ([v]) => [v] },
+      OrderItemStatusEvent: { create: async ([v]) => [v] }
+    };
+    const result = await appendOrderItems(
+      order._id,
+      { items: confirmInput().items, expectedVersion: 0 },
+      {
+        ...infrastructure(),
+        businessConfig: { taxRate: '0.14', deliveryFee: '20' },
+        orderModels: models,
+        productsPort: { snapshot: async () => snapshot() },
+        inventoryPort: { allocate: async () => ({ allocations: [allocation(), allocation()] }) }
+      }
+    );
+    expect(result.totals).toEqual({ subtotal: '220', total: '270.8', balanceDue: '270.8' });
+    expect(String(result.order.tax)).toBe('30.8');
+    expect(String(result.order.actualInventoryCost)).toBe('100');
+    expect(String(result.order.actualProfit)).toBe('120');
+  });
   it('rejects appends on stale order versions', async () => {
     await expect(
       appendOrderItems(
@@ -212,6 +323,7 @@ describe('admin orders lifecycle', () => {
     expect(restore).toHaveBeenCalledWith(item.allocationIds, 'العميل غير رأيه', expect.anything());
     expect(result.progress.total).toBe(0);
     expect(result.order.status).toBe('CANCELLED');
+    expect(result.totals).toEqual({ subtotal: '0', total: '0', balanceDue: '0' });
   });
   it('rejects cancelling an item that is already being prepared elsewhere', async () => {
     await expect(
@@ -310,7 +422,7 @@ describe('admin orders lifecycle', () => {
       balanceDue: money('120')
     });
     const models = {
-      Order: { findOne: () => chain(order) },
+      Order: { findOne: () => chain(order), findById: () => chain(order) },
       OrderItem: { find: () => chain([itemDoc({ orderId: order._id, status: 'READY' })]) },
       OrderStatusEvent: { create: async ([v]) => [v] },
       OrderItemStatusEvent: { create: async ([v]) => [v] }
@@ -352,5 +464,147 @@ describe('admin orders lifecycle', () => {
     expect(updated.balanceDue).toBe('0');
     expect(updated.paymentStatus).toBe('SETTLED');
     expect(order.save).toHaveBeenCalled();
+  });
+  it('scopes inventory allocation sources per order item', async () => {
+    const order = orderDoc();
+    const models = {
+      Order: { create: async ([v]) => [{ ...order, ...v, save: order.save }] },
+      OrderItem: {
+        create: async ([v]) => [{ _id: id(), version: 0, save: vi.fn(), ...v }]
+      },
+      OrderStatusEvent: { create: async ([v]) => [v] },
+      OrderItemStatusEvent: { create: async ([v]) => [v] }
+    };
+    const allocate = vi.fn(async () => ({ allocations: [allocation()] }));
+    await confirmNewOrder(
+      {
+        ...confirmInput(),
+        items: [
+          { productId: String(id()), productSizeId: String(id()), quantity: 1 },
+          { productId: String(id()), productSizeId: String(id()), quantity: 1 }
+        ]
+      },
+      {
+        ...infrastructure(),
+        orderModels: models,
+        productsPort: { snapshot: async () => snapshot() },
+        inventoryPort: { allocate }
+      }
+    );
+    expect(allocate).toHaveBeenCalledTimes(2);
+    const [first, second] = allocate.mock.calls.map((call) => call[1]);
+    expect(String(first.id)).not.toBe(String(second.id));
+    expect(String(first.id)).toBe(String(first.orderItemId));
+    expect(String(second.id)).toBe(String(second.orderItemId));
+  });
+  it('exposes the assigned delegate on the online screen cards', async () => {
+    const delegateId = id();
+    const order = {
+      ...orderDoc(),
+      status: 'READY',
+      fulfillmentType: 'DELIVERY',
+      discount: money('0'),
+      tax: money('0'),
+      deliveryFee: money('0'),
+      actualInventoryCost: money('0'),
+      actualProfit: money('0'),
+      assignedDelegateId: delegateId
+    };
+    const context = {
+      ...infrastructure(),
+      orderModels: {
+        Order: {
+          find: () => ({
+            sort: () => ({ skip: () => ({ limit: () => ({ lean: async () => [order] }) }) })
+          }),
+          countDocuments: async () => 1
+        },
+        OrderItem: { find: () => ({ lean: async () => [] }) }
+      },
+      deliveryModels: {
+        Delegate: { find: () => ({ lean: async () => [{ _id: delegateId, name: 'D-1' }] }) }
+      }
+    };
+    const screen = await getOrdersOnlineScreen({ page: 1, limit: 10 }, context);
+    expect(screen.orders).toHaveLength(1);
+    expect(screen.orders[0].assignedDelegateId).toBe(String(delegateId));
+    expect(screen.orders[0].assignedDelegate).toEqual({ id: String(delegateId), name: 'D-1' });
+  });
+  it('exposes the assigned delegate on order details', async () => {
+    const delegateId = id();
+    const order = {
+      ...orderDoc(),
+      discount: money('0'),
+      tax: money('0'),
+      deliveryFee: money('0'),
+      actualInventoryCost: money('0'),
+      actualProfit: money('0'),
+      assignedDelegateId: delegateId
+    };
+    const context = {
+      ...infrastructure(),
+      orderModels: {
+        Order: { findById: () => ({ lean: async () => order }) }
+      },
+      deliveryModels: {
+        Delegate: { find: () => ({ lean: async () => [{ _id: delegateId, name: 'D-1' }] }) }
+      }
+    };
+    const details = await getOrderDetails(order._id, {}, context);
+    expect(details.order.assignedDelegate).toEqual({ id: String(delegateId), name: 'D-1' });
+  });
+  it('leaves the assigned delegate null when no delegate is assigned', async () => {
+    const order = {
+      ...orderDoc(),
+      discount: money('0'),
+      tax: money('0'),
+      deliveryFee: money('0'),
+      actualInventoryCost: money('0'),
+      actualProfit: money('0'),
+      assignedDelegateId: null
+    };
+    const delegateFind = vi.fn();
+    const context = {
+      ...infrastructure(),
+      orderModels: {
+        Order: { findById: () => ({ lean: async () => order }) }
+      },
+      deliveryModels: { Delegate: { find: delegateFind } }
+    };
+    const details = await getOrderDetails(order._id, {}, context);
+    expect(details.order.assignedDelegate).toBeNull();
+    expect(delegateFind).not.toHaveBeenCalled();
+  });
+  it('emits a fresh outbox sequence when appending to a non-ready order', async () => {
+    const order = orderDoc({ status: 'CONFIRMED', total: money('120'), subtotal: money('120') });
+    const outbox = [];
+    const models = {
+      Order: { findOne: () => chain(order) },
+      OrderItem: {
+        countDocuments: () => chain(1),
+        create: async ([v]) => [{ _id: id(), version: 0, save: vi.fn(), ...v }],
+        find: () => chain([itemDoc({ status: 'CONFIRMED' })])
+      },
+      OrderStatusEvent: { create: async ([v]) => [v] },
+      OrderItemStatusEvent: { create: async ([v]) => [v] }
+    };
+    await appendOrderItems(
+      order._id,
+      { items: confirmInput().items, expectedVersion: 0 },
+      {
+        ...infrastructure(),
+        outboxModel: {
+          create: async ([v]) => {
+            outbox.push(v);
+            return [v];
+          }
+        },
+        orderModels: models,
+        productsPort: { snapshot: async () => snapshot() },
+        inventoryPort: { allocate: async () => ({ allocations: [allocation()] }) }
+      }
+    );
+    expect(order.eventSequence).toBe(2);
+    expect(outbox.filter((v) => v.aggregateType === 'Order').map((v) => v.sequence)).toEqual([2]);
   });
 });

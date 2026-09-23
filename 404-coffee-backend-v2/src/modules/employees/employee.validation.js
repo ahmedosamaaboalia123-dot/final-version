@@ -19,12 +19,16 @@ export const employeeDetailsQuery = z
       .transform((value, ctx) => {
         const values = value ? [...new Set(value.split(',').filter(Boolean))] : [];
         const allowed = new Set(['password', 'devices', 'attendance', 'permissions', 'activity']);
-        if (values.length > 4 || values.some((item) => !allowed.has(item))) {
+        if (values.length > 5 || values.some((item) => !allowed.has(item))) {
           ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Invalid employee include list' });
           return z.NEVER;
         }
         return values;
-      })
+      }),
+    activityPage: z.coerce.number().int().min(1).default(1).optional(),
+    activityLimit: z.coerce.number().int().min(1).max(10).default(10).optional(),
+    attendancePage: z.coerce.number().int().min(1).default(1).optional(),
+    attendanceLimit: z.coerce.number().int().min(1).max(10).default(10).optional()
   })
   .strict();
 export const employeeDevicesQuery = z
@@ -69,6 +73,9 @@ export const updateEmployeeBody = z
     reason: z.string().trim().min(3).max(500).optional(),
     expectedVersion: z.number().int().min(0)
   })
+  .strict();
+export const deleteEmployeeBody = z
+  .object({ expectedVersion: z.number().int().min(0) })
   .strict();
 export const deviceDecisionBody = z
   .object({

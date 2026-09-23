@@ -7,15 +7,24 @@ export async function getPublicTracking(orderId, context = {}) {
   const order = await models.Order.findById(orderId).lean();
   if (!order)
     throw new ApiError({ code: 'ORDER_NOT_FOUND', status: 404, messageAr: 'الطلب غير موجود' });
-  const [items, events] = await Promise.all([
+  const [items, events, delivery, reviewResult] = await Promise.all([
     models.OrderItem.find({ orderId: order._id }).sort({ lineNo: 1, _id: 1 }).lean(),
-    models.OrderStatusEvent.find({ orderId: order._id }).sort({ sequence: 1, _id: 1 }).lean()
+    models.OrderStatusEvent.find({ orderId: order._id }).sort({ sequence: 1, _id: 1 }).lean(),
+    context.ordersDeliveryPort?.getByOrder
+      ? context.ordersDeliveryPort.getByOrder(order._id, context)
+      : null,
+    context.publicTrackingReviewPort?.read
+      ? Promise.resolve(context.publicTrackingReviewPort.read(order._id, context)).catch(() => ({ review: null }))
+      : { review: null }
   ]);
   const active = items.filter((item) => item.status !== 'CANCELLED');
   return {
     orderNumber: order.orderNumber,
+    publicOrderNumber: order.publicOrderNumber,
     barcodeValue: order.barcodeValue,
+    fulfillmentType: order.fulfillmentType,
     status: order.status,
+    version: order.version ?? 0,
     customerReceiptStatus: order.customerReceiptStatus,
     progress: {
       ready: active.filter((item) => item.status === 'READY').length,
@@ -40,7 +49,8 @@ export async function getPublicTracking(orderId, context = {}) {
       deliveryFee: toApiString(order.deliveryFee),
       total: toApiString(order.total)
     },
-    delivery: null,
+    delivery,
+    reviewStatus: reviewResult?.review ? 'SUBMITTED' : 'NONE',
     eventSequence: order.eventSequence
   };
 }

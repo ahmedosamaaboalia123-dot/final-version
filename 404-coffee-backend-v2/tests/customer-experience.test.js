@@ -13,7 +13,8 @@ import {
   issueOrderCredentials,
   lookupPublicOrder,
   maskPhone,
-  requestOrderCancellation
+  requestOrderCancellation,
+  submitPublicReview
 } from '../src/modules/customer-experience/customer-experience.service.js';
 import { getPublicTracking } from '../src/modules/customer-experience/customer-experience.queries.js';
 import { hashToken } from '../src/shared/utils/hash-token.js';
@@ -161,7 +162,9 @@ describe('public customer web', () => {
       tax: money('0'),
       deliveryFee: money('0'),
       total: money('120'),
-      eventSequence: 3
+      eventSequence: 3,
+      version: 2,
+      fulfillmentType: 'DELIVERY'
     };
     const models = {
       Order: { findById: () => ({ lean: async () => order }) },
@@ -182,12 +185,19 @@ describe('public customer web', () => {
         })
       }
     };
-    const tracking = await getPublicTracking(order._id, { publicOrderModels: models });
+    const tracking = await getPublicTracking(order._id, {
+      publicOrderModels: models,
+      ordersDeliveryPort: { getByOrder: async () => ({ status: 'IN_PROGRESS' }) },
+      publicTrackingReviewPort: { read: async () => ({ review: { id: String(id()) } }) }
+    });
     expect(tracking).toMatchObject({
       orderNumber: 'ORD-00000007',
       status: 'PREPARING',
+      version: 2,
+      fulfillmentType: 'DELIVERY',
       eventSequence: 3,
-      delivery: null
+      delivery: { status: 'IN_PROGRESS' },
+      reviewStatus: 'SUBMITTED'
     });
     expect(tracking.items[0]).not.toHaveProperty('recipeSnapshot');
     expect(tracking).not.toHaveProperty('actualInventoryCost');
@@ -284,6 +294,10 @@ describe('public customer web', () => {
       barcodeValue: 'track123',
       fulfillmentType: 'TAKEAWAY',
       status: 'COMPLETED',
+      version: 4,
+      eventSequence: 5,
+      customerReceiptStatus: 'NOT_APPLICABLE',
+      paymentStatus: 'COLLECTED',
       totals: { total: '120' },
       createdAt: new Date('2026-09-11T10:00:00Z')
     };
@@ -300,9 +314,24 @@ describe('public customer web', () => {
     );
     expect(history.items[0]).toMatchObject({
       orderNumber: 'ORD-00000007',
+      version: 4,
+      eventSequence: 5,
       reviewStatus: 'SUBMITTED'
     });
     expect(history.items[0]).not.toHaveProperty('trackingReadToken');
+  });
+  it('passes the customer display name to the review module', async () => {
+    const submit = vi.fn(async (_orderId, input) => ({ _id: id(), ...input }));
+    await submitPublicReview(
+      publicOrder({ status: 'COMPLETED' }),
+      { rating: 5, comment: 'ممتاز', displayName: 'أحمد', expectedOrderVersion: 3 },
+      { ...infrastructure(), reviewModule: { submit } }
+    );
+    expect(submit).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ displayName: 'أحمد', expectedOrderVersion: 3 }),
+      expect.anything()
+    );
   });
   it('creates public orders through the admin confirmation pipeline', async () => {
     const order = { ...publicOrder(), customerId: id(), createdAt: new Date() };

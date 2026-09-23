@@ -82,7 +82,8 @@ export async function getTableDetails(id, context = {}) {
         orderNumber: full.orderNumber,
         status: full.status,
         total: toApiString(full.total),
-        balanceDue: toApiString(full.balanceDue)
+        balanceDue: toApiString(full.balanceDue),
+        version: full.version ?? 0
       };
   }
   return {
@@ -109,7 +110,8 @@ export async function getSessionDetails(id, context = {}) {
         orderNumber: full.orderNumber,
         status: full.status,
         total: toApiString(full.total),
-        balanceDue: toApiString(full.balanceDue)
+        balanceDue: toApiString(full.balanceDue),
+        version: full.version ?? 0
       };
       const rows = await orderModels.OrderItem.find({ orderId: full._id })
         .sort({ lineNo: 1, _id: 1 })

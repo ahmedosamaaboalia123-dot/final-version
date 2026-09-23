@@ -15,7 +15,7 @@ import {
   transactionDto,
   reverseManualTransaction
 } from './drawer.service.js';
-const c = (r, d) => ({ ...r.auth, ...d.serviceContext });
+const c = (r, d) => ({ ...r.auth, ...d.serviceContext, operationRequestId: r.operationRequestId });
 export function createDrawerController(d) {
   return {
     screen: async (r, s) => sendSuccess(s, await getDrawerScreen(c(r, d))),

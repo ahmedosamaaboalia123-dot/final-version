@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { employeeAuth } from '../../platform/auth/employee-auth.middleware.js';
 import { requirePermission } from '../../platform/auth/permission.middleware.js';
 import { asyncHandler } from '../../platform/http/async-handler.js';
+import { idempotentAsyncHandler } from '../../platform/http/idempotent-handler.js';
 import { validate } from '../../platform/http/validate.middleware.js';
 import { AUTH_PERMISSIONS } from '../../shared/constants/auth.constants.js';
 import { createDrawerController } from './drawer.controller.js';
@@ -38,7 +39,7 @@ export function createDrawerRouter(d) {
     '/cash-drawer-transactions/:id/reverse',
     requirePermission(AUTH_PERMISSIONS.DRAWER_MOVE),
     validate({ params: idParams, body: reverseBody }),
-    asyncHandler(c.reverse)
+    idempotentAsyncHandler('drawer.reverse', c.reverse)
   );
   r.get(
     '/cash-drawer-shifts',
@@ -50,7 +51,7 @@ export function createDrawerRouter(d) {
     '/cash-drawer-shifts',
     requirePermission(AUTH_PERMISSIONS.DRAWER_OPEN),
     validate({ body: openBody }),
-    asyncHandler(c.open)
+    idempotentAsyncHandler('drawer.open', c.open)
   );
   r.get(
     '/cash-drawer-shifts/:id',
@@ -62,19 +63,19 @@ export function createDrawerRouter(d) {
     '/cash-drawer-shifts/:id/cash-in',
     requirePermission(AUTH_PERMISSIONS.DRAWER_MOVE),
     validate({ params: idParams, body: movementBody }),
-    asyncHandler(c.cashIn)
+    idempotentAsyncHandler('drawer.cash-in', c.cashIn)
   );
   r.post(
     '/cash-drawer-shifts/:id/cash-out',
     requirePermission(AUTH_PERMISSIONS.DRAWER_MOVE),
     validate({ params: idParams, body: movementBody }),
-    asyncHandler(c.cashOut)
+    idempotentAsyncHandler('drawer.cash-out', c.cashOut)
   );
   r.post(
     '/cash-drawer-shifts/:id/close',
     requirePermission(AUTH_PERMISSIONS.DRAWER_CLOSE),
     validate({ params: idParams, body: closeBody }),
-    asyncHandler(c.close)
+    idempotentAsyncHandler('drawer.close', c.close)
   );
   r.get(
     '/cash-drawer-shifts/:id/print-data',

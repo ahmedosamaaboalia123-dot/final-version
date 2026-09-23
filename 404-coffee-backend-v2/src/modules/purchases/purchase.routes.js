@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { employeeAuth } from '../../platform/auth/employee-auth.middleware.js';
 import { requirePermission } from '../../platform/auth/permission.middleware.js';
 import { asyncHandler } from '../../platform/http/async-handler.js';
+import { idempotentAsyncHandler } from '../../platform/http/idempotent-handler.js';
 import { validate } from '../../platform/http/validate.middleware.js';
 import { AUTH_PERMISSIONS } from '../../shared/constants/auth.constants.js';
 import { createPurchaseController } from './purchase.controller.js';
@@ -29,7 +30,7 @@ export function createPurchaseRouter(d) {
     '/purchase-groups',
     requirePermission(AUTH_PERMISSIONS.PURCHASES_MANAGE),
     validate({ body: createGroupBody }),
-    asyncHandler(c.create)
+    idempotentAsyncHandler('purchases.create', c.create)
   );
   r.get(
     '/purchase-groups/:id',
@@ -41,31 +42,31 @@ export function createPurchaseRouter(d) {
     '/purchase-groups/:id',
     requirePermission(AUTH_PERMISSIONS.PURCHASES_MANAGE),
     validate({ params: idParams, body: updateGroupBody }),
-    asyncHandler(c.update)
+    idempotentAsyncHandler('purchases.update', c.update)
   );
   r.delete(
     '/purchase-groups/:id',
     requirePermission(AUTH_PERMISSIONS.PURCHASES_MANAGE),
     validate({ params: idParams, body: deleteGroupBody }),
-    asyncHandler(c.remove)
+    idempotentAsyncHandler('purchases.delete', c.remove)
   );
   r.post(
     '/purchase-groups/:id/split-by-supplier',
     requirePermission(AUTH_PERMISSIONS.PURCHASES_MANAGE),
     validate({ params: idParams, body: splitBody }),
-    asyncHandler(c.split)
+    idempotentAsyncHandler('purchases.split', c.split)
   );
   r.post(
     '/purchase-items/:id/register',
     requirePermission(AUTH_PERMISSIONS.PURCHASES_REGISTER),
     validate({ params: idParams, body: registerItemBody }),
-    asyncHandler(c.register)
+    idempotentAsyncHandler('purchases.register-item', c.register)
   );
   r.post(
     '/purchase-groups/:id/register-many',
     requirePermission(AUTH_PERMISSIONS.PURCHASES_REGISTER),
     validate({ params: idParams, body: registerManyBody }),
-    asyncHandler(c.registerMany)
+    idempotentAsyncHandler('purchases.register-many', c.registerMany)
   );
   r.get(
     '/purchase-groups/:id/print-data',

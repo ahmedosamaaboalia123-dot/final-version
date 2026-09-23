@@ -14,6 +14,7 @@ import {
 const contextFrom = (req, dependencies) => ({
   ...req.auth,
   currency: dependencies.config.business.currency,
+  operationRequestId: req.operationRequestId,
   ...dependencies.serviceContext
 });
 const cashDto = (value) =>

@@ -6,6 +6,7 @@ import {
   createCashTransaction,
   openShift
 } from '../src/modules/drawer/drawer.service.js';
+import { openBody } from '../src/modules/drawer/drawer.validation.js';
 const id = () => new mongoose.Types.ObjectId(),
   chain = (v) => ({ session: async () => v });
 function shift() {
@@ -53,6 +54,11 @@ describe('cash drawer invariants', () => {
     expect(toApiString(s.totalCashIn)).toBe('0');
     expect(toApiString(s.totalCashOut)).toBe('0');
     expect(toApiString(s.expectedClosingBalance)).toBe('500');
+    expect(s.shiftNo).toMatch(/^SH-\d{6}$/);
+  });
+  it('rejects any client-supplied shift reference number', () => {
+    expect(openBody.safeParse({ openingBalance: '500', shiftNo: 'SH-000001' }).success).toBe(false);
+    expect(openBody.safeParse({ openingBalance: '500' }).success).toBe(true);
   });
   it('updates the projection and rejects an OUT above drawer balance', async () => {
     const s = shift(),

@@ -34,6 +34,7 @@ const orderSchema = new mongoose.Schema(
     subtotal: money,
     discount: money,
     tax: money,
+    taxRateSnapshot: { type: mongoose.Schema.Types.Decimal128, default: undefined },
     deliveryFee: money,
     total: money,
     actualInventoryCost: money,

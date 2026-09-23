@@ -68,6 +68,7 @@ const entrySchema = new mongoose.Schema(
   { timestamps: false, versionKey: false }
 );
 entrySchema.index({ supplierId: 1, sequenceNo: 1 }, { unique: true });
+entrySchema.index({ operationRequestId: 1 }, { unique: true, sparse: true });
 entrySchema.index(
   { reversesEntryId: 1 },
   { unique: true, partialFilterExpression: { reversesEntryId: { $type: 'objectId' } } }

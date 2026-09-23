@@ -3,12 +3,20 @@ import { z } from 'zod';
 const id = z.string().regex(/^[a-f\d]{24}$/i);
 const version = z.number().int().min(0);
 
+export const publicListQuery = z
+  .object({
+    page: z.coerce.number().int().min(1).default(1),
+    limit: z.coerce.number().int().min(1).max(10).default(3)
+  })
+  .strict();
+
 export const idParams = z.object({ id }).strict();
 
 export const submitBody = z
   .object({
     rating: z.number().int().min(1).max(5),
     comment: z.string().trim().max(1000).optional(),
+    displayName: z.string().trim().min(1).max(100).optional(),
     expectedOrderVersion: version
   })
   .strict();

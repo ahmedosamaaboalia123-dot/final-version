@@ -24,6 +24,7 @@ const sessionSchema = new mongoose.Schema(
       default: 'OPEN'
     },
     activeOrderId: mongoose.Schema.Types.ObjectId,
+    eventSequence: { type: Number, required: true, default: 0 },
     openedBy: mongoose.Schema.Types.ObjectId,
     openedAt: { type: Date, required: true, default: Date.now },
     closedAt: Date,

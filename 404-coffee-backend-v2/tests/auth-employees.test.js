@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { login, refreshSession } from '../src/modules/auth/auth.service.js';
 import { toEmployeePrivateDto } from '../src/modules/employees/employee.mapper.js';
-import { decideDevice } from '../src/modules/employees/employee.service.js';
+import { decideDevice, deleteEmployee } from '../src/modules/employees/employee.service.js';
 import { employeeAuth } from '../src/platform/auth/employee-auth.middleware.js';
 import { AUTH_PERMISSIONS } from '../src/shared/constants/auth.constants.js';
 import { hashToken, signAccessToken, verifyAccessToken } from '../src/shared/utils/hash-token.js';
@@ -335,5 +335,66 @@ describe('device, refresh, and permission invalidation', () => {
 
   it('uses only token hashes for refresh lookup', () => {
     expect(hashToken('plain-refresh')).not.toContain('plain-refresh');
+  });
+});
+
+describe('hard delete employee', () => {
+  const deleteContext = (employee, actorId = 'admin-1', lastSequence = null) => ({
+    ...baseContext,
+    actorId,
+    models: {
+      Employee: {
+        findOne: () => chained(employee),
+        deleteOne: vi.fn(async () => ({ deletedCount: 1 }))
+      },
+      OutboxEvent: {
+        findOne: () => ({
+          sort: () => ({ select: () => ({ session: async () => lastSequence === null ? null : { sequence: lastSequence } }) })
+        })
+      }
+    },
+    auditModel: { create: async ([value]) => [value] },
+    outboxModel: { create: async ([value]) => [value] },
+    sequenceModel: { findOneAndUpdate: async () => ({ value: 1 }) }
+  });
+
+  it('deletes only the employee document', async () => {
+    const context = deleteContext({ _id: 'e1', name: 'أحمد', position: 'كاشير', status: 'ACTIVE', version: 2 });
+    const result = await deleteEmployee('e1', { expectedVersion: 2 }, context);
+    expect(result).toMatchObject({ deleted: true, employeeId: 'e1' });
+    expect(context.models.Employee.deleteOne).toHaveBeenCalledWith({ _id: 'e1' }, expect.anything());
+  });
+
+  it('forbids deleting your own account', async () => {
+    const context = deleteContext({ _id: 'e1', name: 'أحمد', position: 'كاشير', status: 'ACTIVE', version: 0 }, 'e1');
+    await expect(deleteEmployee('e1', { expectedVersion: 0 }, context)).rejects.toMatchObject({
+      code: 'SELF_DELETE_FORBIDDEN',
+      status: 403
+    });
+    expect(context.models.Employee.deleteOne).not.toHaveBeenCalled();
+  });
+
+  it('conflicts when the employee is missing or modified', async () => {
+    const context = deleteContext(null);
+    await expect(deleteEmployee('e1', { expectedVersion: 0 }, context)).rejects.toMatchObject({
+      code: 'EMPLOYEE_VERSION_CONFLICT',
+      status: 409
+    });
+  });
+
+  it('continues the outbox sequence after previous aggregate events', async () => {
+    const seen = [];
+    const context = {
+      ...deleteContext({ _id: 'e1', name: 'أحمد', position: 'كاشير', status: 'ACTIVE', version: 0 }, 'admin-1', 7),
+      outboxModel: {
+        create: async ([value]) => {
+          seen.push(value);
+          return [value];
+        }
+      }
+    };
+    const result = await deleteEmployee('e1', { expectedVersion: 0 }, context);
+    expect(result).toMatchObject({ deleted: true });
+    expect(seen[0].sequence).toBe(8);
   });
 });

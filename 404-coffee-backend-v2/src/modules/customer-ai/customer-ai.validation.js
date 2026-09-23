@@ -6,6 +6,17 @@ export const chatBody = z
   .object({
     conversationId: z.string().trim().min(1).max(100).optional(),
     message: z.string().trim().min(1).max(2000),
+    history: z
+      .array(
+        z
+          .object({
+            role: z.enum(['user', 'assistant']),
+            content: z.string().trim().min(1).max(2000)
+          })
+          .strict()
+      )
+      .max(12)
+      .optional(),
     context: z
       .object({
         visibleProductIds: z.array(id).max(50).optional(),

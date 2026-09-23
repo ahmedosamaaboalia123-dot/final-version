@@ -50,20 +50,12 @@ export async function bootstrapGuestSession(input, context = {}) {
     async (tx) => {
       const models = context.tableGuestModels ?? defaults;
       const now = context.now ?? new Date();
-      const table = await models.Table.findOne({ tableNumber: input.tableNumber }).select(
-        '+currentQrSecretHash'
-      );
+      const table = await models.Table.findOne({ tableNumber: input.tableNumber });
       if (!table || table.outOfService)
         throw new ApiError({
-          code: 'TABLE_QR_INVALID',
-          status: 401,
-          messageAr: 'رمز الطاولة غير صالح'
-        });
-      if (!table.currentQrSecretHash || table.currentQrSecretHash !== hashToken(input.qrSecret))
-        throw new ApiError({
-          code: 'TABLE_QR_INVALID',
-          status: 401,
-          messageAr: 'رمز الطاولة غير صالح'
+          code: 'TABLE_NOT_FOUND',
+          status: 404,
+          messageAr: 'الطاولة غير موجودة'
         });
       const sequence = await nextSequence('table-guest-session', { ...context, ...tx });
       const tableToken = createOpaqueToken();
@@ -88,36 +80,6 @@ export async function bootstrapGuestSession(input, context = {}) {
         tableToken,
         expiresAt: session.expiresAt
       };
-    },
-    context,
-    context.transactionOptions
-  );
-}
-
-export async function rotateTableQr(tableId, input, context = {}) {
-  return runInTransaction(
-    async (tx) => {
-      const models = context.tableGuestModels ?? defaults;
-      const table = await models.Table.findOne({
-        _id: tableId,
-        version: input.expectedVersion
-      }).session(tx.session);
-      if (!table)
-        throw new ApiError({
-          code: 'TABLE_VERSION_CONFLICT',
-          status: 409,
-          messageAr: 'الطاولة غير موجودة أو تغيرت'
-        });
-      const qrSecret = createOpaqueToken();
-      table.currentQrSecretHash = hashToken(qrSecret);
-      table.qrVersion += 1;
-      await table.save({ session: tx.session });
-      await models.TableGuestSession.updateMany(
-        { tableId: table._id, status: 'ACTIVE' },
-        { $set: { status: 'REVOKED' } },
-        { session: tx.session }
-      );
-      return { table, qrSecret, qrVersion: table.qrVersion };
     },
     context,
     context.transactionOptions

@@ -10,7 +10,11 @@ import {
 } from './order.service.js';
 import { getOrderDetails, getOrderHistoryScreen, getOrdersOnlineScreen } from './order.queries.js';
 
-const ctx = (r, d) => ({ ...r.auth, ...d.serviceContext });
+const ctx = (r, d) => ({
+  ...r.auth,
+  ...d.serviceContext,
+  operationRequestId: r.operationRequestId
+});
 
 export function createOrderController(d) {
   return {

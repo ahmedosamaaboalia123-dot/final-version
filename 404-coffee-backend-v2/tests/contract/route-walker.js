@@ -72,7 +72,8 @@ export function isPublicRoute(route) {
       'GET /api/v1/catalog',
       'POST /api/v1/customer-ai/chat',
       'GET /api/v1/realtime/sync',
-      'GET /api/v1/media/:id/content'
+      'GET /api/v1/media/:id/content',
+      'GET /api/v1/public-reviews'
     ].includes(key)
   )
     return true;

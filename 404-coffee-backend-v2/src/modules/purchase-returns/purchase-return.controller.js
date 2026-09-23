@@ -6,7 +6,11 @@ import {
   getPurchaseReturnsScreen
 } from './purchase-return.queries.js';
 import { createPurchaseReturn, returnDto, returnItemDto } from './purchase-return.service.js';
-const ctx = (req, d) => ({ ...req.auth, ...d.serviceContext });
+const ctx = (req, d) => ({
+  ...req.auth,
+  ...d.serviceContext,
+  operationRequestId: req.operationRequestId
+});
 export function createPurchaseReturnController(d) {
   return {
     screen: async (req, res) =>

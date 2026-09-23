@@ -3,6 +3,7 @@ import { ApiError } from '../../platform/http/api-error.js';
 import { AuditEvent } from '../../platform/audit/audit-event.model.js';
 
 const listItemDto = (event) => ({
+  id: event._id ? String(event._id) : '',
   eventNo: event.eventNo,
   eventType: event.eventType,
   module: event.module,
@@ -13,6 +14,35 @@ const listItemDto = (event) => ({
   severity: event.severity,
   occurredAt: event.occurredAt
 });
+
+async function attachActorNames(events, context = {}) {
+  const list = Array.isArray(events) ? events : [events];
+  const ids = [
+    ...new Set(
+      list
+        .filter((event) => event?.actor?.type === 'EMPLOYEE' && event?.actor?.id)
+        .map((event) => String(event.actor.id))
+    )
+  ];
+  if (!ids.length) return events;
+  const port = context.employeeDirectoryPort;
+  let names = {};
+  if (port?.getNamesByIds) {
+    names = (await port.getNamesByIds(ids, context)) ?? {};
+  } else if (context.models?.Employee) {
+    const rows = await context.models.Employee.find({ _id: { $in: ids } })
+      .select('name')
+      .lean();
+    names = Object.fromEntries(rows.map((row) => [String(row._id), row.name ?? null]));
+  } else {
+    return events;
+  }
+  const apply = (event) =>
+    !event?.actor || event.actor.type !== 'EMPLOYEE'
+      ? event
+      : { ...event, actor: { ...event.actor, name: names[String(event.actor.id)] ?? null } };
+  return Array.isArray(events) ? list.map(apply) : apply(events);
+}
 
 export async function getAuditScreen(filters = {}, context = {}) {
   const model = context.auditModel ?? AuditEvent;
@@ -49,7 +79,7 @@ export async function getAuditScreen(filters = {}, context = {}) {
   }
   return {
     summary,
-    items: rows.map(listItemDto),
+    items: await attachActorNames(rows.map(listItemDto), context),
     filters: {
       module: filters.module ?? null,
       eventType: filters.eventType ?? null,
@@ -69,7 +99,7 @@ export async function getAuditEvent(id, context = {}) {
   if (!event)
     throw new ApiError({ code: 'AUDIT_NOT_FOUND', status: 404, messageAr: 'الحدث غير موجود' });
   const { _id, ...rest } = event;
-  return { event: { id: String(_id), ...rest } };
+  return { event: await attachActorNames({ id: String(_id), ...rest }, context) };
 }
 
 export async function getEntityTimeline(entityType, entityId, filters = {}, context = {}) {
@@ -82,16 +112,20 @@ export async function getEntityTimeline(entityType, entityId, filters = {}, cont
     model.countDocuments(query)
   ]);
   return {
-    items: rows.map((event) => ({
-      eventNo: event.eventNo,
-      eventType: event.eventType,
-      action: event.action,
-      actor: event.actor,
-      result: event.result,
-      severity: event.severity,
-      occurredAt: event.occurredAt,
-      summary: `${event.action} ${event.result}`
-    })),
+    items: await attachActorNames(
+      rows.map((event) => ({
+        id: event._id ? String(event._id) : '',
+        eventNo: event.eventNo,
+        eventType: event.eventType,
+        action: event.action,
+        actor: event.actor,
+        result: event.result,
+        severity: event.severity,
+        occurredAt: event.occurredAt,
+        summary: `${event.action} ${event.result}`
+      })),
+      context
+    ),
     pageMeta: buildPageMeta({ page, limit, totalItems, sort: { occurredAt: -1 } })
   };
 }

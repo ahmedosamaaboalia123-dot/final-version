@@ -20,7 +20,8 @@ const groupSchema = new mongoose.Schema(
     registeredAt: Date,
     registeredBy: mongoose.Schema.Types.ObjectId,
     deletedAt: Date,
-    deletedBy: mongoose.Schema.Types.ObjectId
+    deletedBy: mongoose.Schema.Types.ObjectId,
+    operationRequestId: { type: mongoose.Schema.Types.ObjectId, unique: true, sparse: true }
   },
   options
 );

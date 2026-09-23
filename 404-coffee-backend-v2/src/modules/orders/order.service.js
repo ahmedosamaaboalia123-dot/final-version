@@ -2,6 +2,9 @@ import crypto from 'node:crypto';
 import {
   add,
   compare,
+  divide,
+  multiply,
+  roundMoney,
   subtract,
   toApiString,
   toDecimal128
@@ -141,9 +144,21 @@ async function refreshTotals(models, order, context, tx) {
   const active = items.filter((item) => item.status !== 'CANCELLED');
   const subtotal = active.reduce((sum, item) => add(sum, item.lineSubtotal), ZERO);
   const cost = active.reduce((sum, item) => add(sum, item.actualInventoryCost), ZERO);
+  const discount = toApiString(order.discount ?? ZERO);
+  const taxRate = order.taxRateSnapshot
+    ? toApiString(order.taxRateSnapshot)
+    : compare(order.subtotal ?? ZERO, ZERO) > 0
+      ? toApiString(divide(order.tax ?? ZERO, order.subtotal, 12))
+      : String(context.businessConfig?.taxRate ?? ZERO);
+  const tax = roundMoney(multiply(subtotal, taxRate));
+  const deliveryFee = toApiString(order.deliveryFee ?? ZERO);
+  const total = add(add(subtract(subtotal, discount), tax), deliveryFee);
   order.subtotal = toDecimal128(subtotal);
+  order.taxRateSnapshot = toDecimal128(taxRate);
+  order.tax = toDecimal128(tax);
+  order.total = toDecimal128(total);
   order.actualInventoryCost = toDecimal128(cost);
-  order.actualProfit = toDecimal128(subtract(subtotal, cost));
+  order.actualProfit = toDecimal128(subtract(subtract(subtotal, discount), cost));
   const projection = paymentProjection(order);
   order.balanceDue = toDecimal128(projection.due);
   order.paymentStatus = projection.paymentStatus;
@@ -184,6 +199,7 @@ export async function confirmNewOrder(input, context = {}) {
             subtotal: toDecimal128(totals.subtotal),
             discount: toDecimal128(totals.discount),
             tax: toDecimal128(totals.tax),
+            taxRateSnapshot: toDecimal128(businessConfig.taxRate ?? ZERO),
             deliveryFee: toDecimal128(totals.deliveryFee),
             total: toDecimal128(totals.total),
             actualInventoryCost: toDecimal128(ZERO),
@@ -235,7 +251,7 @@ export async function confirmNewOrder(input, context = {}) {
           pricedItem.requirements,
           {
             type: 'ORDER_ITEM',
-            id: order._id,
+            id: item._id,
             orderItemId: item._id,
             occurredOn: now,
             reason: `تأكيد الطلب ${order.orderNumber}`
@@ -254,7 +270,9 @@ export async function confirmNewOrder(input, context = {}) {
         createdItems.push(item);
       }
       order.actualInventoryCost = toDecimal128(orderCost);
-      order.actualProfit = toDecimal128(subtract(totals.subtotal, orderCost));
+      order.actualProfit = toDecimal128(
+        subtract(subtract(totals.subtotal, totals.discount), orderCost)
+      );
       const linkCustomer = context.customersPort?.upsertForOrder;
       if (linkCustomer && input.fulfillmentType !== 'DINE_IN') {
         const customer = await linkCustomer(
@@ -348,7 +366,7 @@ export async function appendOrderItems(orderId, input, context = {}) {
           pricedItem.requirements,
           {
             type: 'ORDER_ITEM',
-            id: order._id,
+            id: item._id,
             orderItemId: item._id,
             occurredOn: now,
             reason: `إضافة للطلب ${order.orderNumber}`
@@ -369,7 +387,9 @@ export async function appendOrderItems(orderId, input, context = {}) {
       const refreshed = await refreshTotals(models, order, context, tx);
       if (order.status === 'READY')
         await statusEvent(models, order, 'PREPARING', 'ITEMS_APPENDED', context, tx);
-      else
+      else {
+        order.eventSequence += 1;
+        await order.save({ session: tx.session });
         await record(
           'order.updated',
           order._id,
@@ -381,6 +401,7 @@ export async function appendOrderItems(orderId, input, context = {}) {
           },
           { ...context, ...tx }
         );
+      }
       return {
         order,
         addedItems,
@@ -611,12 +632,13 @@ export async function completeTakeawayOrder(orderId, input, context = {}) {
       }
       const finalize = context.invoicesPort?.finalize ?? finalizeInvoice;
       const { invoice } = await finalize(orderId, { ...context, ...tx });
-      await refreshTotals(models, order, context, tx);
-      await statusEvent(models, order, 'COMPLETED', 'TAKEAWAY_COMPLETED', context, tx);
+      const live = await models.Order.findById(orderId).session(tx.session);
+      await refreshTotals(models, live, context, tx);
+      await statusEvent(models, live, 'COMPLETED', 'TAKEAWAY_COMPLETED', context, tx);
       const recordCompletion = context.customersPort?.recordCompletion;
-      if (recordCompletion && order.customerId)
-        await recordCompletion(order.customerId, { ...context, ...tx });
-      return { order, payment, drawerTransaction, invoice };
+      if (recordCompletion && live.customerId)
+        await recordCompletion(live.customerId, { ...context, ...tx });
+      return { order: live, payment, drawerTransaction, invoice };
     },
     context,
     context.transactionOptions

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { employeeAuth } from '../../platform/auth/employee-auth.middleware.js';
 import { requirePermission } from '../../platform/auth/permission.middleware.js';
 import { asyncHandler } from '../../platform/http/async-handler.js';
+import { idempotentAsyncHandler } from '../../platform/http/idempotent-handler.js';
 import { validate } from '../../platform/http/validate.middleware.js';
 import { AUTH_PERMISSIONS } from '../../shared/constants/auth.constants.js';
 import { createTablesController } from './tables.controller.js';
@@ -10,7 +11,6 @@ import {
   cancelSessionBody,
   closeSessionBody,
   idParams,
-  rotateQrBody,
   sessionItemsBody,
   tableStatusBody
 } from './tables.validation.js';
@@ -30,19 +30,13 @@ export function createTablesRouter(d) {
     '/tables/:id',
     requirePermission(AUTH_PERMISSIONS.TABLES_MANAGE),
     validate({ params: idParams, body: tableStatusBody }),
-    asyncHandler(c.status)
+    idempotentAsyncHandler('tables.status', c.status)
   );
   r.post(
     '/tables/:id/admin-orders',
     requirePermission(AUTH_PERMISSIONS.TABLES_MANAGE),
     validate({ params: idParams, body: adminOrderBody }),
-    asyncHandler(c.openOrder)
-  );
-  r.post(
-    '/tables/:id/rotate-qr',
-    requirePermission(AUTH_PERMISSIONS.TABLES_MANAGE),
-    validate({ params: idParams, body: rotateQrBody }),
-    asyncHandler(c.rotateQr)
+    idempotentAsyncHandler('tables.open-order', c.openOrder)
   );
   r.get(
     '/table-sessions/:id',
@@ -54,19 +48,19 @@ export function createTablesRouter(d) {
     '/table-sessions/:id/items',
     requirePermission(AUTH_PERMISSIONS.TABLES_MANAGE),
     validate({ params: idParams, body: sessionItemsBody }),
-    asyncHandler(c.addItems)
+    idempotentAsyncHandler('tables.add-items', c.addItems)
   );
   r.post(
     '/table-sessions/:id/cancel',
     requirePermission(AUTH_PERMISSIONS.TABLES_MANAGE),
     validate({ params: idParams, body: cancelSessionBody }),
-    asyncHandler(c.cancel)
+    idempotentAsyncHandler('tables.cancel-session', c.cancel)
   );
   r.post(
     '/table-sessions/:id/close',
     requirePermission(AUTH_PERMISSIONS.TABLES_MANAGE),
     validate({ params: idParams, body: closeSessionBody }),
-    asyncHandler(c.close)
+    idempotentAsyncHandler('tables.close-session', c.close)
   );
   r.get(
     '/table-sessions/:id/print-data',

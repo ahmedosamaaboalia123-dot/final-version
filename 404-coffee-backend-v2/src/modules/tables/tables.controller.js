@@ -1,6 +1,5 @@
 import { sendCreated, sendSuccess } from '../../platform/http/response.js';
 import { itemDto } from '../orders/order.mapper.js';
-import { rotateTableQr } from '../table-experience/table-experience.public-service.js';
 import {
   addSessionItems,
   cancelTableSession,
@@ -16,7 +15,11 @@ import {
 } from './tables.queries.js';
 import { sessionDto, tableDto } from './tables.mapper.js';
 
-const ctx = (r, d) => ({ ...r.auth, ...d.serviceContext });
+const ctx = (r, d) => ({
+  ...r.auth,
+  ...d.serviceContext,
+  operationRequestId: r.operationRequestId
+});
 
 export function createTablesController(d) {
   return {
@@ -65,14 +68,6 @@ export function createTablesController(d) {
       });
     },
     print: async (r, s) =>
-      sendSuccess(s, await getSessionPrintData(r.validated.params.id, ctx(r, d))),
-    rotateQr: async (r, s) => {
-      const result = await rotateTableQr(r.validated.params.id, r.validated.body, ctx(r, d));
-      return sendSuccess(s, {
-        table: tableDto(result.table),
-        qrSecret: result.qrSecret,
-        qrVersion: result.qrVersion
-      });
-    }
+      sendSuccess(s, await getSessionPrintData(r.validated.params.id, ctx(r, d)))
   };
 }

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { asyncHandler } from '../../platform/http/async-handler.js';
+import { idempotentAsyncHandler } from '../../platform/http/idempotent-handler.js';
 import { validate } from '../../platform/http/validate.middleware.js';
 import { createPublicGuards } from './customer-experience.middleware.js';
 import { createCustomerExperienceController } from './customer-experience.controller.js';
@@ -19,7 +20,11 @@ export function createCustomerExperienceRouter(d) {
   const r = Router(),
     c = createCustomerExperienceController(d),
     guards = createPublicGuards(d);
-  r.post('/public-orders', validate({ body: checkoutBody }), asyncHandler(c.checkout));
+  r.post(
+    '/public-orders',
+    validate({ body: checkoutBody }),
+    idempotentAsyncHandler('public-orders.create', c.checkout, { publicActor: true })
+  );
   r.post('/public-orders/lookup', validate({ body: lookupBody }), asyncHandler(c.lookup));
   r.get(
     '/public-orders/:orderNumber/tracking',
@@ -31,25 +36,25 @@ export function createCustomerExperienceRouter(d) {
     '/public-orders/:orderNumber/items',
     validate({ params: orderNumberParams, body: publicAppendBody }),
     guards.action,
-    asyncHandler(c.append)
+    idempotentAsyncHandler('public-orders.append', c.append, { publicActor: true })
   );
   r.post(
     '/public-orders/:orderNumber/cancellation-request',
     validate({ params: orderNumberParams, body: cancellationBody }),
     guards.action,
-    asyncHandler(c.cancel)
+    idempotentAsyncHandler('public-orders.cancel', c.cancel, { publicActor: true })
   );
   r.post(
     '/public-orders/:orderNumber/receive',
     validate({ params: orderNumberParams, body: receiveBody }),
     guards.action,
-    asyncHandler(c.receive)
+    idempotentAsyncHandler('public-orders.receive', c.receive, { publicActor: true })
   );
   r.post(
     '/public-orders/:orderNumber/reviews',
     validate({ params: orderNumberParams, body: publicReviewBody }),
     guards.action,
-    asyncHandler(c.review)
+    idempotentAsyncHandler('public-orders.review', c.review, { publicActor: true })
   );
   r.post(
     '/customer-access-sessions',

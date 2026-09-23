@@ -4,8 +4,9 @@ import { ApiError } from '../../platform/http/api-error.js';
 import { writeAudit } from '../../platform/audit/audit-writer.js';
 import { normalizeName } from '../../shared/utils/normalize-name.js';
 import { AuthSession, Employee, EmployeeDevice, Role } from './employee.models.js';
+import { OutboxEvent } from '../../platform/events/outbox-event.model.js';
 
-const modelsDefault = { Employee, EmployeeDevice, Role, AuthSession };
+const modelsDefault = { Employee, EmployeeDevice, Role, AuthSession, OutboxEvent };
 function auditBase(context, action, entity) {
   return {
     eventType: `EMPLOYEE_${action}`,
@@ -116,6 +117,63 @@ export async function updateEmployee(employeeId, input, context = {}) {
         { ...tx, ...context }
       );
       return { employee, passwordChanged };
+    },
+    context,
+    context.transactionOptions
+  );
+}
+
+export async function deleteEmployee(employeeId, input, context = {}) {
+  return runInTransaction(
+    async (tx) => {
+      const models = context.models ?? modelsDefault;
+      const employee = await models.Employee.findOne({
+        _id: employeeId,
+        version: input.expectedVersion
+      }).session(tx.session);
+      if (!employee)
+        throw new ApiError({
+          code: 'EMPLOYEE_VERSION_CONFLICT',
+          status: 409,
+          messageAr: 'الموظف غير موجود أو تم تعديله'
+        });
+      if (context.actorId && String(context.actorId) === String(employee._id))
+        throw new ApiError({
+          code: 'SELF_DELETE_FORBIDDEN',
+          status: 403,
+          messageAr: 'لا يمكنك حذف حسابك الحالي'
+        });
+      const snapshot = { name: employee.name, position: employee.position, status: employee.status };
+      await models.Employee.deleteOne({ _id: employee._id }, { session: tx.session });
+      const lastEvent = models.OutboxEvent
+        ? await models.OutboxEvent.findOne({
+            aggregateType: 'Employee',
+            aggregateId: String(employee._id)
+          })
+            .sort({ sequence: -1 })
+            .select('sequence')
+            .session(tx.session)
+        : null;
+      const sequence = Number(lastEvent?.sequence ?? employee.version) + 1;
+      await writeAudit(
+        {
+          ...auditBase(context, 'DELETED', { type: 'Employee', id: employee._id }),
+          severity: 'WARNING',
+          metadataSafe: snapshot
+        },
+        { ...tx, ...context }
+      );
+      await enqueueDomainEvent(
+        {
+          aggregateType: 'Employee',
+          aggregateId: String(employee._id),
+          eventType: 'employee.deleted',
+          payload: { employeeId: String(employee._id), ...snapshot },
+          sequence
+        },
+        { ...tx, ...context }
+      );
+      return { deleted: true, employeeId: String(employee._id) };
     },
     context,
     context.transactionOptions

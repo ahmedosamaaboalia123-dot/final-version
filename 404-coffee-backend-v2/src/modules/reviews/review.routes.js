@@ -9,9 +9,17 @@ import {
   idParams,
   listQuery,
   moderationBody,
+  publicListQuery,
   submitBody,
   updateBody
 } from './review.validation.js';
+
+export function createPublicReviewRouter(d) {
+  const r = Router(),
+    c = createReviewController(d);
+  r.get('/public-reviews', validate({ query: publicListQuery }), asyncHandler(c.publicList));
+  return r;
+}
 
 export function createReviewRouter(d) {
   const r = Router(),

@@ -16,6 +16,7 @@ const ctx = (r, d) => ({
   actorType: r.auth?.actorType ?? 'GUEST',
   actorId: r.auth?.actorId,
   requestId: r.requestId,
+  operationRequestId: r.operationRequestId,
   clientIp: r.ip
 });
 

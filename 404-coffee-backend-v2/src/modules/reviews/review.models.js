@@ -12,6 +12,7 @@ const reviewSchema = new mongoose.Schema(
     },
     rating: { type: Number, required: true, min: 1, max: 5 },
     comment: String,
+    displayName: { type: String, trim: true, maxlength: 100 },
     status: {
       type: String,
       enum: ['VISIBLE', 'HIDDEN'],

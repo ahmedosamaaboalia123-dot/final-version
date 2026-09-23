@@ -5,11 +5,13 @@ import { enqueueDomainEvent } from '../../platform/events/outbox-writer.js';
 import { ApiError } from '../../platform/http/api-error.js';
 import { normalizePhone } from '../../shared/utils/normalize-phone.js';
 import { normalizeName } from '../../shared/utils/normalize-name.js';
+import { nextSequence } from '../../platform/database/sequence.js';
 import { Customer } from './customer.models.js';
 
 const defaults = { Customer };
 
 async function record(kind, customerId, payload, context) {
+  const sequence = await nextSequence(`customer-profile:${customerId}`, context);
   await writeAudit(
     {
       eventType: kind.toUpperCase().replaceAll('.', '_').replaceAll('-', '_'),
@@ -27,11 +29,11 @@ async function record(kind, customerId, payload, context) {
   );
   await enqueueDomainEvent(
     {
-      aggregateType: 'Customer',
+      aggregateType: 'CustomerProfile',
       aggregateId: String(customerId),
       eventType: kind,
       payload,
-      sequence: payload.sequence ?? 1
+      sequence
     },
     context
   );

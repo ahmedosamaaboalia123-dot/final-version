@@ -19,8 +19,7 @@ const proposalInputItem = z
 
 export const bootstrapBody = z
   .object({
-    tableNumber: z.number().int().min(1).max(20),
-    qrSecret: z.string().min(20).max(200)
+    tableNumber: z.number().int().min(1).max(20)
   })
   .strict();
 
@@ -49,6 +48,7 @@ export const guestReviewBody = z
   .object({
     rating: z.number().int().min(1).max(5),
     comment: z.string().trim().max(1000).optional(),
+    displayName: z.string().trim().min(1).max(100).optional(),
     expectedOrderVersion: version
   })
   .strict();
@@ -70,5 +70,3 @@ export const proposalScreenQuery = z
     limit: z.coerce.number().int().min(1).max(10).default(10)
   })
   .strict();
-
-export const rotateQrBody = z.object({ expectedVersion: version }).strict();

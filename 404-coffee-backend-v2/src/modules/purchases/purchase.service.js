@@ -23,9 +23,7 @@ async function prepareItems(inputs, models, context) {
       status: 422,
       messageAr: 'المادة الخام مكررة في الفاتورة'
     });
-  const materials = await models.RawMaterial.find({ _id: { $in: ids } }).session(
-    context.session
-  );
+  const materials = await models.RawMaterial.find({ _id: { $in: ids } }).session(context.session);
   if (materials.length !== ids.length)
     throw new ApiError({
       code: 'INVALID_PURCHASE_MATERIAL',
@@ -94,7 +92,8 @@ export async function createPurchaseGroup(input, context = {}) {
             invoiceDate: input.invoiceDate ?? DateTime.now().setZone('Africa/Cairo').toISODate(),
             subtotal: toDecimal128(subtotal),
             itemCount: rows.length,
-            createdBy: context.actorId
+            createdBy: context.actorId,
+            operationRequestId: context.operationRequestId
           }
         ],
         { session: tx.session }

@@ -339,8 +339,7 @@ describe('audit trail ui', () => {
     expect(screen.filters).toMatchObject({ module: 'orders' });
     expect(screen.items).toHaveLength(1);
   });
-  it('maps stored events to stable public ids', async () => {
-    const event = {
+  it('maps stored events to stable public ids', async () => {    const event = {
       _id: id(),
       eventNo: 7,
       eventType: 'ORDER_CREATED',
@@ -392,6 +391,48 @@ describe('audit trail ui', () => {
     );
     expect(timeline.items[0]).toMatchObject({ eventNo: 2, summary: 'UPDATE SUCCESS' });
     expect(timeline.pageMeta.totalItems).toBe(2);
+  });
+  it('enriches employee actors with names in one lookup', async () => {
+    const employeeId = String(id());
+    const rows = [
+      { eventNo: 1, eventType: 'A', actor: { type: 'EMPLOYEE', id: employeeId }, result: 'SUCCESS', severity: 'INFO' },
+      { eventNo: 2, eventType: 'B', actor: { type: 'EMPLOYEE', id: String(id()) }, result: 'SUCCESS', severity: 'INFO' },
+      { eventNo: 3, eventType: 'C', actor: { type: 'SYSTEM' }, result: 'SUCCESS', severity: 'INFO' }
+    ];
+    const getNamesByIds = vi.fn(async (_ids) => ({ [employeeId]: 'أحمد' }));
+    const screen = await getAuditScreen(
+      { page: 1, limit: 10 },
+      {
+        auditModel: {
+          find: () => ({ sort: () => ({ skip: () => ({ limit: () => ({ lean: async () => rows }) }) }) }),
+          countDocuments: async () => 3,
+          aggregate: async () => []
+        },
+        employeeDirectoryPort: { getNamesByIds }
+      }
+    );
+    expect(getNamesByIds).toHaveBeenCalledTimes(1);
+    expect(getNamesByIds.mock.calls[0][0].sort()).toEqual([employeeId, rows[1].actor.id].sort());
+    expect(screen.items[0].actor).toMatchObject({ type: 'EMPLOYEE', name: 'أحمد' });
+    expect(screen.items[1].actor.name).toBeNull();
+    expect(screen.items[2].actor).toMatchObject({ type: 'SYSTEM' });
+    expect(screen.items[2].actor).not.toHaveProperty('name');
+  });
+  it('leaves actors unchanged when no directory is available', async () => {
+    const rows = [
+      { eventNo: 1, eventType: 'A', actor: { type: 'EMPLOYEE', id: String(id()) }, result: 'SUCCESS', severity: 'INFO' }
+    ];
+    const screen = await getAuditScreen(
+      { page: 1, limit: 10 },
+      {
+        auditModel: {
+          find: () => ({ sort: () => ({ skip: () => ({ limit: () => ({ lean: async () => rows }) }) }) }),
+          countDocuments: async () => 1,
+          aggregate: async () => []
+        }
+      }
+    );
+    expect(screen.items[0].actor).toEqual(rows[0].actor);
   });
 });
 

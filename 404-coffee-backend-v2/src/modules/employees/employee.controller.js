@@ -1,5 +1,5 @@
 import { sendCreated, sendSuccess } from '../../platform/http/response.js';
-import { createEmployee, decideDevice, updateEmployee } from './employee.service.js';
+import { createEmployee, decideDevice, deleteEmployee, updateEmployee } from './employee.service.js';
 import { getEmployeeDetails, getEmployeesScreen, listEmployeeDevices } from './employee.queries.js';
 import { toDeviceDto, toEmployeePrivateDto } from './employee.mapper.js';
 import { replacePermissionMatrix } from './permission.service.js';
@@ -27,15 +27,21 @@ export function createEmployeeController(dependencies) {
         toEmployeePrivateDto(result.employee, context, { revealPassword: true })
       );
     },
-    details: async (req, res) =>
-      sendSuccess(
+    details: async (req, res) => {
+      const ctx = contextFrom(req, dependencies);
+      ctx.activityPage = req.validated?.query?.activityPage;
+      ctx.activityLimit = req.validated?.query?.activityLimit;
+      ctx.attendancePage = req.validated?.query?.attendancePage;
+      ctx.attendanceLimit = req.validated?.query?.attendanceLimit;
+      return sendSuccess(
         res,
         await getEmployeeDetails(
           req.validated.params.id,
           req.validated?.query?.include ?? [],
-          contextFrom(req, dependencies)
+          ctx
         )
-      ),
+      );
+    },
     devices: async (req, res) =>
       sendSuccess(
         res,
@@ -52,6 +58,15 @@ export function createEmployeeController(dependencies) {
         passwordChanged: result.passwordChanged
       });
     },
+    remove: async (req, res) =>
+      sendSuccess(
+        res,
+        await deleteEmployee(
+          req.validated.params.id,
+          req.validated.body,
+          contextFrom(req, dependencies)
+        )
+      ),
     approveDevice: async (req, res) => {
       const result = await decideDevice(
         req.validated.params.id,

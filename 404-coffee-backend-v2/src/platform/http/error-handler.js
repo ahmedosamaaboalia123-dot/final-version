@@ -35,11 +35,27 @@ export function errorHandler(error, req, res, _next) {
 }
 
 export function mapMongoError(error) {
+  if (error?.name === 'VersionError') {
+    return new ApiError({
+      code: 'VERSION_CONFLICT',
+      status: 409,
+      messageAr: 'تغيرت البيانات أثناء تنفيذ العملية، أعد تحميل الصفحة وحاول مرة أخرى',
+      retryable: true,
+      cause: error
+    });
+  }
   if (error?.code === 11000) {
     return new ApiError({
       code: 'DUPLICATE_VALUE',
       status: 409,
-      messageAr: 'القيمة مستخدمة بالفعل'
+      messageAr: 'القيمة مستخدمة بالفعل',
+      details: {
+        fields: Object.keys(error.keyPattern ?? {}),
+        index:
+          typeof error.message === 'string'
+            ? (error.message.match(/index:\s+([^\s]+)\s+dup key/)?.[1] ?? null)
+            : null
+      }
     });
   }
   if (error?.hasErrorLabel?.('TransientTransactionError')) {

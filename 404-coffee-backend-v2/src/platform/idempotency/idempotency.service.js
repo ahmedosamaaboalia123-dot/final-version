@@ -32,6 +32,14 @@ export async function beginOperation(input, context = {}) {
         messageAr: 'مفتاح العملية مستخدم لطلب مختلف'
       });
     }
+    if (existing.status === 'PROCESSING' && existing.leaseUntil <= new Date()) {
+      const reclaimed = await model.findOneAndUpdate(
+        { _id: existing._id, status: 'PROCESSING', leaseUntil: { $lte: new Date() } },
+        { $set: { leaseUntil: new Date(Date.now() + input.leaseMs) } },
+        { new: true, session: context.session }
+      );
+      if (reclaimed) return { state: 'NEW', operation: reclaimed };
+    }
     return { state: existing.status, operation: existing };
   }
   try {

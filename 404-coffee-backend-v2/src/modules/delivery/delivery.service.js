@@ -6,6 +6,7 @@ import { enqueueDomainEvent } from '../../platform/events/outbox-writer.js';
 import { ApiError } from '../../platform/http/api-error.js';
 import { normalizeName } from '../../shared/utils/normalize-name.js';
 import { normalizePhone } from '../../shared/utils/normalize-phone.js';
+import { OutboxEvent } from '../../platform/events/outbox-event.model.js';
 import { Order, OrderStatusEvent } from '../orders/order.models.js';
 import { finalizeInvoice } from '../invoices/invoice.public-service.js';
 import { listOrderPayments, settleCodPayment } from '../payments/payment.public-service.js';
@@ -14,6 +15,17 @@ import { Delegate, DeliveryAssignment, DeliveryConfirmation } from './delivery.m
 const defaults = { Delegate, DeliveryAssignment, DeliveryConfirmation };
 const orderDefaults = { Order, OrderStatusEvent };
 const ZERO = '0';
+
+async function nextAggregateSequence(aggregateId, current, context, tx) {
+  const model = context.outboxModel ?? OutboxEvent;
+  const query = model
+    .find({ aggregateType: 'DeliveryAssignment', aggregateId: String(aggregateId) })
+    .sort({ sequence: -1 })
+    .limit(1);
+  const scoped = tx?.session ? query.session(tx.session) : query;
+  const last = await scoped.lean();
+  return Math.max(current ?? 0, last[0]?.sequence ?? 0) + 1;
+}
 
 async function record(kind, assignmentId, payload, context) {
   await writeAudit(
@@ -108,10 +120,17 @@ export async function createDelegate(input, context = {}) {
         ],
         { session: tx.session }
       );
+      delegate.eventSequence = await nextAggregateSequence(
+        delegate._id,
+        delegate.eventSequence,
+        { ...context, ...tx },
+        tx
+      );
+      await delegate.save({ session: tx.session });
       await record(
         'delegate.created',
         delegate._id,
-        { delegateId: String(delegate._id) },
+        { delegateId: String(delegate._id), sequence: delegate.eventSequence },
         { ...context, ...tx }
       );
       return delegate;
@@ -144,11 +163,17 @@ export async function updateDelegate(id, input, context = {}) {
         delegate.status = input.status;
         delegate.statusReason = input.status === 'INACTIVE' ? input.reason : undefined;
       }
+      delegate.eventSequence = await nextAggregateSequence(
+        delegate._id,
+        delegate.eventSequence,
+        { ...context, ...tx },
+        tx
+      );
       await delegate.save({ session: tx.session });
       await record(
         'delegate.updated',
         delegate._id,
-        { delegateId: String(delegate._id) },
+        { delegateId: String(delegate._id), sequence: delegate.eventSequence },
         { ...context, ...tx }
       );
       return delegate;
@@ -205,13 +230,21 @@ export async function assignDelegate(orderId, input, context = {}) {
       await order.save({ session: tx.session });
       delegate.activeOrderCount += 1;
       await delegate.save({ session: tx.session });
+      assignment.eventSequence = await nextAggregateSequence(
+        assignment._id,
+        assignment.eventSequence,
+        { ...context, ...tx },
+        tx
+      );
+      await assignment.save({ session: tx.session });
       await record(
         'delivery.assigned',
         assignment._id,
         {
           assignmentId: String(assignment._id),
           orderId: String(order._id),
-          delegateId: String(delegate._id)
+          delegateId: String(delegate._id),
+          sequence: assignment.eventSequence
         },
         { ...context, ...tx }
       );
@@ -246,13 +279,23 @@ export async function handoverAssignment(assignmentId, input, context = {}) {
           messageAr: 'الطلب غير جاهز للتسليم للمندوب'
         });
       assignment.status = 'IN_PROGRESS';
+      assignment.eventSequence = await nextAggregateSequence(
+        assignment._id,
+        assignment.eventSequence,
+        { ...context, ...tx },
+        tx
+      );
       await assignment.save({ session: tx.session });
       order.customerReceiptStatus = 'AVAILABLE';
       await orderEvent(orderModels, order, 'OUT_FOR_DELIVERY', 'DELEGATE_HANDOVER', context, tx);
       await record(
         'delivery.handed-over',
         assignment._id,
-        { assignmentId: String(assignment._id), orderId: String(order._id) },
+        {
+          assignmentId: String(assignment._id),
+          orderId: String(order._id),
+          sequence: assignment.eventSequence
+        },
         { ...context, ...tx }
       );
       return { assignment, order };
@@ -305,6 +348,13 @@ export async function reassignDelivery(assignmentId, input, context = {}) {
       previous.supersededBy = assignment._id;
       previous.reason = input.reason;
       await previous.save({ session: tx.session });
+      assignment.eventSequence = await nextAggregateSequence(
+        assignment._id,
+        assignment.eventSequence,
+        { ...context, ...tx },
+        tx
+      );
+      await assignment.save({ session: tx.session });
       const order = await orderModels.Order.findById(previous.orderId).session(tx.session);
       if (order) {
         order.assignedDelegateId = delegate._id;
@@ -324,7 +374,8 @@ export async function reassignDelivery(assignmentId, input, context = {}) {
         {
           assignmentId: String(assignment._id),
           previousAssignmentId: String(previous._id),
-          delegateId: String(delegate._id)
+          delegateId: String(delegate._id),
+          sequence: assignment.eventSequence
         },
         { ...context, ...tx }
       );
@@ -353,12 +404,22 @@ export async function recordFailedAttempt(assignmentId, input, context = {}) {
         });
       assignment.status = 'FAILED';
       assignment.reason = input.reason;
+      assignment.eventSequence = await nextAggregateSequence(
+        assignment._id,
+        assignment.eventSequence,
+        { ...context, ...tx },
+        tx
+      );
       await assignment.save({ session: tx.session });
       const order = await orderModels.Order.findById(assignment.orderId).session(tx.session);
       await record(
         'delivery.failed',
         assignment._id,
-        { assignmentId: String(assignment._id), orderId: String(assignment.orderId) },
+        {
+          assignmentId: String(assignment._id),
+          orderId: String(assignment.orderId),
+          sequence: assignment.eventSequence
+        },
         { ...context, ...tx }
       );
       return { assignment, order };
@@ -386,6 +447,12 @@ export async function returnDeliveryToStore(assignmentId, input, context = {}) {
         });
       assignment.status = 'RETURNED';
       assignment.reason = input.reason;
+      assignment.eventSequence = await nextAggregateSequence(
+        assignment._id,
+        assignment.eventSequence,
+        { ...context, ...tx },
+        tx
+      );
       await assignment.save({ session: tx.session });
       const order = await orderModels.Order.findById(assignment.orderId).session(tx.session);
       if (order && order.status === 'OUT_FOR_DELIVERY') {
@@ -400,7 +467,11 @@ export async function returnDeliveryToStore(assignmentId, input, context = {}) {
       await record(
         'delivery.returned',
         assignment._id,
-        { assignmentId: String(assignment._id), orderId: String(assignment.orderId) },
+        {
+          assignmentId: String(assignment._id),
+          orderId: String(assignment.orderId),
+          sequence: assignment.eventSequence
+        },
         { ...context, ...tx }
       );
       return { assignment, order };
@@ -464,6 +535,12 @@ export async function confirmDeliveryReceipt(orderId, input, context = {}) {
       await order.save({ session: tx.session });
       await orderEvent(orderModels, order, 'COMPLETED', 'DELIVERY_RECEIVED', context, tx);
       assignment.status = 'DELIVERED';
+      assignment.eventSequence = await nextAggregateSequence(
+        assignment._id,
+        assignment.eventSequence,
+        { ...context, ...tx },
+        tx
+      );
       await assignment.save({ session: tx.session });
       const delegate = await models.Delegate.findById(assignment.delegateId).session(tx.session);
       if (delegate) {
@@ -482,7 +559,8 @@ export async function confirmDeliveryReceipt(orderId, input, context = {}) {
         {
           assignmentId: String(assignment._id),
           orderId: String(order._id),
-          source: receivedBy
+          source: receivedBy,
+          sequence: assignment.eventSequence
         },
         { ...context, ...tx }
       );
@@ -514,6 +592,45 @@ export async function adminConfirmDelivery(assignmentId, input, context = {}) {
     order._id,
     { expectedVersion: order.version, receivedBy: 'ADMIN_OVERRIDE', reason: input.reason },
     context
+  );
+}
+
+export const CUSTOMER_DELIVERY_REASON = 'تأكيد استلام من قسم المناديب';
+
+export async function deliverToCustomer(assignmentId, input, context = {}) {
+  return runInTransaction(
+    async (tx) => {
+      const models = context.deliveryModels ?? defaults;
+      const current = await models.DeliveryAssignment.findOne({
+        _id: assignmentId,
+        version: input.expectedVersion,
+        status: { $in: ['ASSIGNED', 'IN_PROGRESS'] }
+      }).session(tx.session);
+      if (!current)
+        throw new ApiError({
+          code: 'ASSIGNMENT_DELIVER_CONFLICT',
+          status: 409,
+          messageAr: 'الإسناد غير متاح لتأكيد الاستلام أو تغير'
+        });
+      const scope = { ...context, ...tx };
+      if (current.status === 'ASSIGNED') {
+        await handoverAssignment(assignmentId, { expectedVersion: input.expectedVersion }, scope);
+      }
+      const orderModels = context.deliveryOrderModels ?? orderDefaults;
+      const handed = await models.DeliveryAssignment.findById(assignmentId).session(tx.session);
+      const order = await orderModels.Order.findById(handed.orderId).session(tx.session);
+      return confirmDeliveryReceipt(
+        handed.orderId,
+        {
+          expectedVersion: order ? order.version : 0,
+          receivedBy: 'ADMIN_OVERRIDE',
+          reason: CUSTOMER_DELIVERY_REASON
+        },
+        scope
+      );
+    },
+    context,
+    context.transactionOptions
   );
 }
 
@@ -564,6 +681,12 @@ export async function settleAssignmentCash(assignmentId, input, context = {}) {
       assignment.cashSettledTotal = toDecimal128(
         add(toApiString(assignment.cashSettledTotal ?? ZERO), settled)
       );
+      assignment.eventSequence = await nextAggregateSequence(
+        assignment._id,
+        assignment.eventSequence,
+        { ...context, ...tx },
+        tx
+      );
       await assignment.save({ session: tx.session });
       const outstandingCash = toApiString(
         subtract(
@@ -577,7 +700,8 @@ export async function settleAssignmentCash(assignmentId, input, context = {}) {
         {
           assignmentId: String(assignment._id),
           settled,
-          outstandingCash
+          outstandingCash,
+          sequence: assignment.eventSequence
         },
         { ...context, ...tx }
       );
@@ -616,26 +740,43 @@ export async function closeCancelledAssignments(orderId, reason, context = {}) {
 }
 
 export async function recordWhatsappShare(assignmentId, input, context = {}) {
-  const models = context.deliveryModels ?? defaults;
-  const assignment = await models.DeliveryAssignment.findOne({
-    _id: assignmentId,
-    version: input.expectedVersion
-  });
-  if (!assignment)
-    throw new ApiError({
-      code: 'ASSIGNMENT_VERSION_CONFLICT',
-      status: 409,
-      messageAr: 'الإسناد غير موجود أو تغير'
-    });
-  await record(
-    'delivery.whatsapp-opened',
-    assignment._id,
-    { assignmentId: String(assignment._id), orderId: String(assignment.orderId) },
-    context
+  return runInTransaction(
+    async (tx) => {
+      const models = context.deliveryModels ?? defaults;
+      const assignment = await models.DeliveryAssignment.findOne({
+        _id: assignmentId,
+        version: input.expectedVersion
+      }).session(tx.session);
+      if (!assignment)
+        throw new ApiError({
+          code: 'ASSIGNMENT_VERSION_CONFLICT',
+          status: 409,
+          messageAr: 'الإسناد غير موجود أو تغير'
+        });
+      assignment.eventSequence = await nextAggregateSequence(
+        assignment._id,
+        assignment.eventSequence,
+        { ...context, ...tx },
+        tx
+      );
+      await assignment.save({ session: tx.session });
+      await record(
+        'delivery.whatsapp-opened',
+        assignment._id,
+        {
+          assignmentId: String(assignment._id),
+          orderId: String(assignment.orderId),
+          sequence: assignment.eventSequence
+        },
+        { ...context, ...tx }
+      );
+      return {
+        recorded: true,
+        openedAt: context.now ?? new Date(),
+        assignmentId: String(assignment._id)
+      };
+    },
+    context,
+    context.transactionOptions
   );
-  return {
-    recorded: true,
-    openedAt: context.now ?? new Date(),
-    assignmentId: String(assignment._id)
-  };
 }

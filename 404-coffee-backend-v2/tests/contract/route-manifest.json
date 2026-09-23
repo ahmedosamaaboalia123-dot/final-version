@@ -177,6 +177,10 @@
   },
   {
     "method": "POST",
+    "path": "/api/v1/delivery-assignments/:id/deliver-to-customer"
+  },
+  {
+    "method": "POST",
     "path": "/api/v1/delivery-assignments/:id/failed"
   },
   {
@@ -222,6 +226,10 @@
   {
     "method": "GET",
     "path": "/api/v1/employees-screen"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/v1/employees/:id"
   },
   {
     "method": "GET",
@@ -504,6 +512,10 @@
     "path": "/api/v1/public-orders/lookup"
   },
   {
+    "method": "GET",
+    "path": "/api/v1/public-reviews"
+  },
+  {
     "method": "POST",
     "path": "/api/v1/purchase-groups"
   },
@@ -758,10 +770,6 @@
   {
     "method": "POST",
     "path": "/api/v1/tables/:id/admin-orders"
-  },
-  {
-    "method": "POST",
-    "path": "/api/v1/tables/:id/rotate-qr"
   },
   {
     "method": "GET",

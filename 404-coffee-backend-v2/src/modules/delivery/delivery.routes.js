@@ -89,6 +89,12 @@ export function createDeliveryRouter(d) {
     asyncHandler(c.override)
   );
   r.post(
+    '/delivery-assignments/:id/deliver-to-customer',
+    requirePermission(AUTH_PERMISSIONS.DELIVERY_MANAGE),
+    validate({ params: idParams, body: assignmentActionBody }),
+    asyncHandler(c.deliver)
+  );
+  r.post(
     '/delivery-assignments/:id/settle-cash',
     requirePermission(AUTH_PERMISSIONS.DELIVERY_MANAGE),
     validate({ params: idParams, body: assignmentActionBody }),

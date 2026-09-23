@@ -206,7 +206,8 @@ function balancesFor(kind, amount, account) {
 }
 
 async function recordEntry(supplierId, input, context) {
-  return runInTransaction(
+  try {
+    return await runInTransaction(
     async (tx) => {
       const models = context.models ?? defaults;
       const supplier = await models.Supplier.findById(supplierId).session(tx.session);
@@ -268,8 +269,8 @@ async function recordEntry(supplierId, input, context) {
       );
       await enqueueDomainEvent(
         {
-          aggregateType: 'Supplier',
-          aggregateId: String(supplierId),
+          aggregateType: 'SupplierAccount',
+          aggregateId: String(account._id),
           eventType: 'supplier.account-updated',
           payload: {
             supplierId: String(supplierId),
@@ -281,10 +282,24 @@ async function recordEntry(supplierId, input, context) {
         { ...context, ...tx }
       );
       return { entry, account, drawerTransaction };
-    },
-    context,
-    context.transactionOptions
-  );
+      },
+      context,
+      context.transactionOptions
+    );
+  } catch (error) {
+    if (error?.code !== 11000 || !context.operationRequestId) throw error;
+    const models = context.models ?? defaults;
+    const replayed = await models.SupplierAccountEntry.findOne({
+      operationRequestId: context.operationRequestId
+    }).lean();
+    if (!replayed)
+      throw new ApiError({
+        code: 'ENTRY_WRITE_CONFLICT',
+        status: 409,
+        messageAr: 'تعارض في قيد المورد، أعد تحميل الصفحة'
+      });
+    return { entry: replayed, replayed: true };
+  }
 }
 export const recordDebt = (supplierId, input, context) =>
   recordEntry(supplierId, { ...input, kind: 'DEBT' }, context);
@@ -413,8 +428,8 @@ export async function reverseSupplierEntry(entryId, input, context = {}) {
       );
       await enqueueDomainEvent(
         {
-          aggregateType: 'Supplier',
-          aggregateId: String(original.supplierId),
+          aggregateType: 'SupplierAccount',
+          aggregateId: String(account._id),
           eventType: 'supplier.account-updated',
           payload: {
             supplierId: String(original.supplierId),
@@ -482,7 +497,7 @@ export async function updateSupplierEntry(entryId, input, context = {}) {
         drawerTransactionId: replacementDrawerTransaction?.id ?? replacementDrawerTransaction?._id
       }], { session: tx.session });
       await writeAudit(audit(context, 'ACCOUNT_ENTRY_UPDATED', 'SupplierAccountEntry', original._id, { reversalEntryId: String(reversalEntry._id), replacementEntryId: String(replacementEntry._id), reason: input.reason }), { ...context, ...tx });
-      await enqueueDomainEvent({ aggregateType: 'Supplier', aggregateId: String(original.supplierId), eventType: 'supplier.account-updated', payload: { supplierId: String(original.supplierId), debtBalance: toApiString(account.debtBalance), receivableBalance: toApiString(account.receivableBalance) }, sequence: account.version }, { ...context, ...tx });
+      await enqueueDomainEvent({ aggregateType: 'SupplierAccount', aggregateId: String(account._id), eventType: 'supplier.account-updated', payload: { supplierId: String(original.supplierId), debtBalance: toApiString(account.debtBalance), receivableBalance: toApiString(account.receivableBalance) }, sequence: account.version }, { ...context, ...tx });
       return { originalEntry: original, reversalEntry, replacementEntry, account, drawerTransactions: [reversalDrawerTransaction, replacementDrawerTransaction].filter(Boolean) };
     }, context, context.transactionOptions
   );

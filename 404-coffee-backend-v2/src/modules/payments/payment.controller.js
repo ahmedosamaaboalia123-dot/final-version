@@ -8,7 +8,11 @@ import {
 } from './payment.service.js';
 import { listOrderPayments } from './payment.queries.js';
 import { transactionDto } from '../drawer/drawer.service.js';
-const ctx = (r, d) => ({ ...r.auth, ...d.serviceContext });
+const ctx = (r, d) => ({
+  ...r.auth,
+  ...d.serviceContext,
+  operationRequestId: r.operationRequestId
+});
 const resultDto = (x) => ({
   payment: paymentDto(x.payment),
   order: x.order,

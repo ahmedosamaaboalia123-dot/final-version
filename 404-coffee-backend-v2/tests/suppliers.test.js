@@ -124,6 +124,24 @@ describe('supplier manual balances', () => {
     expect(state.entries.map((entry) => entry.occurredOn)).toEqual(['2026-09-10', '2026-09-10']);
   });
 
+  it('publishes account changes on the account aggregate with its own sequence', async () => {
+    const state = buildContext();
+    const published = [];
+    state.context.outboxModel.create = async ([value]) => {
+      published.push(value);
+      return [value];
+    };
+
+    await recordDebt(state.supplier._id, input('DEBT', '10'), state.context);
+    await recordDebt(state.supplier._id, input('DEBT', '5', 1), state.context);
+
+    expect(published).toHaveLength(2);
+    expect(published.map(({ aggregateType, aggregateId, sequence }) => ({ aggregateType, aggregateId, sequence }))).toEqual([
+      { aggregateType: 'SupplierAccount', aggregateId: String(state.account._id), sequence: 1 },
+      { aggregateType: 'SupplierAccount', aggregateId: String(state.account._id), sequence: 2 }
+    ]);
+  });
+
   it('rejects a debt payment larger than the balance before calling the drawer', async () => {
     const drawerPort = { createSupplierSettlement: vi.fn() };
     const state = buildContext({ debt: '50', drawerPort });
@@ -285,5 +303,62 @@ describe('supplier normalization', () => {
   it('normalizes common Egyptian phone representations deterministically', () => {
     expect(normalizePhone('0100 123 4567')).toBe('+201001234567');
     expect(normalizePhone('+20 100 123 4567')).toBe('+201001234567');
+  });
+});
+
+describe('supplier entry idempotency', () => {
+  it('replays a duplicate entry write for the same operation key', async () => {
+    const opId = new mongoose.Types.ObjectId();
+    const account = {
+      _id: new mongoose.Types.ObjectId(),
+      supplierId: new mongoose.Types.ObjectId(),
+      version: 0,
+      debtBalance: toDecimal128('0'),
+      receivableBalance: toDecimal128('0'),
+      save: vi.fn(async () => {
+        account.version += 1;
+      })
+    };
+    const supplier = { _id: account.supplierId, status: 'ACTIVE' };
+    const stored = { _id: new mongoose.Types.ObjectId(), kind: 'DEBT', operationRequestId: opId };
+    let creates = 0;
+    const models = {
+      Supplier: { findById: () => chain(supplier) },
+      SupplierAccount: { findOne: () => chain(account) },
+      SupplierAccountEntry: {
+        create: async ([value]) => {
+          creates += 1;
+          if (creates > 1) throw Object.assign(new Error('duplicate'), { code: 11000 });
+          return [{ ...value, _id: new mongoose.Types.ObjectId() }];
+        },
+        findOne: () => ({ lean: async () => stored })
+      }
+    };
+    const base = {
+      session: {},
+      actorType: 'EMPLOYEE',
+      actorId: new mongoose.Types.ObjectId(),
+      requestId: 'request-1',
+      operationRequestId: opId,
+      models,
+      auditModel: { create: async ([value]) => [value] },
+      sequenceModel: { findOneAndUpdate: async () => ({ value: 1 }) },
+      outboxModel: { create: async ([value]) => [value] }
+    };
+    const first = await recordDebt(
+      supplier._id,
+      { kind: 'DEBT', amount: '50', occurredOn: '2026-09-10', expectedAccountVersion: 0 },
+      base
+    );
+    expect(first.entry.kind).toBe('DEBT');
+    expect(toApiString(first.account.debtBalance)).toBe('50');
+    const replay = await recordDebt(
+      supplier._id,
+      { kind: 'DEBT', amount: '50', occurredOn: '2026-09-10', expectedAccountVersion: 1 },
+      base
+    );
+    expect(replay.replayed).toBe(true);
+    expect(String(replay.entry._id)).toBe(String(stored._id));
+    expect(creates).toBe(2);
   });
 });

@@ -7,6 +7,7 @@ import { AUTH_PERMISSIONS } from '../../shared/constants/auth.constants.js';
 import { createEmployeeController } from './employee.controller.js';
 import {
   createEmployeeBody,
+  deleteEmployeeBody,
   deviceDecisionBody,
   employeeDetailsQuery,
   employeeDevicesQuery,
@@ -55,6 +56,12 @@ export function createEmployeeRouter(dependencies) {
     requirePermission(AUTH_PERMISSIONS.EMPLOYEES_UPDATE),
     validate({ params: employeeIdParams, body: updateEmployeeBody }),
     asyncHandler(controller.update)
+  );
+  router.delete(
+    '/employees/:id',
+    requirePermission(AUTH_PERMISSIONS.EMPLOYEES_UPDATE),
+    validate({ params: employeeIdParams, body: deleteEmployeeBody }),
+    asyncHandler(controller.remove)
   );
   router.post(
     '/employee-devices/:id/approve',

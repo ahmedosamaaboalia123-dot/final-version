@@ -10,6 +10,8 @@ import {
 } from '../../platform/database/decimal.js';
 import { nextSequence } from '../../platform/database/sequence.js';
 import { runInTransaction } from '../../platform/database/transaction.js';
+import { writeAudit } from '../../platform/audit/audit-writer.js';
+import { enqueueDomainEvent } from '../../platform/events/outbox-writer.js';
 import { ApiError } from '../../platform/http/api-error.js';
 import { RawMaterial, RawMaterialBatch, InventoryMovement } from '../inventory/inventory.models.js';
 import { consumeFromBatch } from '../inventory/inventory.service.js';
@@ -158,6 +160,39 @@ export async function createPurchaseReturn(input, context = {}) {
         movements.push(consumed.movement);
       }
       const items = await m.PurchaseReturnItem.create(itemRows, { session: tx.session });
+      await writeAudit(
+        {
+          eventType: 'PURCHASE_RETURN_CREATED',
+          category: 'FINANCIAL',
+          module: 'purchase-returns',
+          action: 'CREATED',
+          actor: { type: context.actorType, id: context.actorId },
+          entity: { type: 'PurchaseReturn', id: header._id },
+          result: 'SUCCESS',
+          severity: 'INFO',
+          metadataSafe: {
+            itemCount: plan.length,
+            totalInventoryValue: toApiString(total),
+            returnDate: input.returnDate
+          },
+          requestId: context.requestId
+        },
+        { ...context, ...tx }
+      );
+      await enqueueDomainEvent(
+        {
+          aggregateType: 'PurchaseReturn',
+          aggregateId: String(header._id),
+          eventType: 'purchase-return.created',
+          payload: {
+            returnId: String(header._id),
+            itemCount: plan.length,
+            totalInventoryValue: toApiString(total)
+          },
+          sequence: 1
+        },
+        { ...context, ...tx }
+      );
       return {
         return: header,
         items,

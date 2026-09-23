@@ -1,9 +1,35 @@
 import { buildPageMeta, buildSkipLimit, parsePage } from '../../platform/database/pagination.js';
 import { ApiError } from '../../platform/http/api-error.js';
+import { Delegate } from '../delivery/delivery.models.js';
 import { Order, OrderItem, OrderStatusEvent } from './order.models.js';
 import { itemDto, orderDto } from './order.mapper.js';
 
 const OPEN_STATUSES = ['CONFIRMED', 'PREPARING', 'READY', 'OUT_FOR_DELIVERY'];
+
+async function assignedDelegateMap(orders, context = {}) {
+  const ids = [
+    ...new Set(
+      (orders || [])
+        .map((order) => order.assignedDelegateId)
+        .filter(Boolean)
+        .map(String)
+    )
+  ];
+  if (ids.length === 0) return new Map();
+  const model = context.deliveryModels?.Delegate ?? Delegate;
+  const rows = await model.find({ _id: { $in: ids } }).lean();
+  return new Map(
+    rows.map((delegate) => [
+      String(delegate._id),
+      { id: String(delegate._id), name: delegate.name }
+    ])
+  );
+}
+
+function withAssignedDelegate(order, names) {
+  const key = order.assignedDelegateId ? String(order.assignedDelegateId) : null;
+  return { ...order, assignedDelegate: key ? (names.get(key) ?? { id: key, name: null }) : null };
+}
 
 export async function getOrdersOnlineScreen(filters = {}, context = {}) {
   const models = context.orderModels ?? { Order, OrderItem };
@@ -26,16 +52,20 @@ export async function getOrdersOnlineScreen(filters = {}, context = {}) {
   const allItems = rows.length
     ? await models.OrderItem.find({ orderId: { $in: rows.map((order) => order._id) } }).lean()
     : [];
+  const delegateNames = await assignedDelegateMap(rows, context);
   const cards = rows.map((order) => {
     const items = allItems.filter((item) => String(item.orderId) === String(order._id));
     const active = items.filter((item) => item.status !== 'CANCELLED');
-    return {
-      ...orderDto(order),
-      progress: {
-        ready: active.filter((item) => item.status === 'READY').length,
-        total: active.length
-      }
-    };
+    return withAssignedDelegate(
+      {
+        ...orderDto(order),
+        progress: {
+          ready: active.filter((item) => item.status === 'READY').length,
+          total: active.length
+        }
+      },
+      delegateNames
+    );
   });
   return {
     summary: {
@@ -72,7 +102,9 @@ export async function getOrderDetails(id, include = {}, context = {}) {
   const order = await models.Order.findById(id).lean();
   if (!order)
     throw new ApiError({ code: 'ORDER_NOT_FOUND', status: 404, messageAr: 'الطلب غير موجود' });
-  const result = { order: orderDto(order) };
+  const result = {
+    order: withAssignedDelegate(orderDto(order), await assignedDelegateMap([order], context))
+  };
   if (include.items) {
     const items = await models.OrderItem.find({ orderId: order._id })
       .sort({ lineNo: 1, _id: 1 })

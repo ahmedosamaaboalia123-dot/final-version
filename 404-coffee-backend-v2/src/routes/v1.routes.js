@@ -27,7 +27,7 @@ import {
   createTableServiceGuestRouter
 } from '../modules/table-services/table-services.routes.js';
 import { createOrderCasesRouter } from '../modules/order-cases/order-cases.routes.js';
-import { createMediaRouter } from '../modules/media/media.routes.js';
+import { createMediaRouter, createPublicMediaRouter } from '../modules/media/media.routes.js';
 import { assertReadyAsset } from '../modules/media/media.public-service.js';
 import { createCustomerAiRouter } from '../modules/customer-ai/customer-ai.routes.js';
 import { createDashboardRouter } from '../modules/dashboard/dashboard.routes.js';
@@ -50,12 +50,12 @@ import { createDeliveryRouter } from '../modules/delivery/delivery.routes.js';
 import { confirmDeliveryReceipt } from '../modules/delivery/delivery.public-service.js';
 import { createCustomerExperienceRouter } from '../modules/customer-experience/customer-experience.routes.js';
 import { createCustomerRouter } from '../modules/customers/customer.routes.js';
-import { createReviewRouter } from '../modules/reviews/review.routes.js';
+import { createPublicReviewRouter, createReviewRouter } from '../modules/reviews/review.routes.js';
 import {
   recordCustomerOrderCompletion,
   upsertCustomerForOrder
 } from '../modules/customers/customer.public-service.js';
-import { listCustomerReviews } from '../modules/reviews/review.public-service.js';
+import { getOrderReview, listCustomerReviews } from '../modules/reviews/review.public-service.js';
 import { listCustomerOrders } from '../modules/orders/order.public-service.js';
 import { createPreparationRouter } from '../modules/preparation/preparation.routes.js';
 import { createOrderRouter } from '../modules/orders/order.routes.js';
@@ -81,6 +81,7 @@ import {
   assertSupplierExists
 } from '../modules/suppliers/supplier.public-service.js';
 import { listByEmployee } from '../modules/attendance/attendance.public-service.js';
+import { getEmployeeNames } from '../modules/employees/employees.public-service.js';
 import { listAuditByActor } from '../platform/audit/audit.queries.js';
 import { employeeAuth } from '../platform/auth/employee-auth.middleware.js';
 import { asyncHandler } from '../platform/http/async-handler.js';
@@ -93,6 +94,9 @@ export function createV1Router(dependencies = {}) {
     serviceContext: {
       ...dependencies.serviceContext,
       deepseek: dependencies.serviceContext?.deepseek ?? dependencies.config?.deepseek ?? null,
+      business: dependencies.serviceContext?.business ?? dependencies.config?.business ?? null,
+      businessConfig:
+        dependencies.serviceContext?.businessConfig ?? dependencies.config?.business ?? {},
       mediaConfig: dependencies.serviceContext?.mediaConfig ?? dependencies.config?.media ?? null,
       materialsPort: dependencies.serviceContext?.materialsPort ?? {
         listBySupplier: listMaterialsBySupplier
@@ -122,6 +126,9 @@ export function createV1Router(dependencies = {}) {
         getOpenShiftWarnings
       },
       attendancePort: dependencies.serviceContext?.attendancePort ?? { listByEmployee },
+      employeeDirectoryPort: dependencies.serviceContext?.employeeDirectoryPort ?? {
+        getNamesByIds: getEmployeeNames
+      },
       auditPort: dependencies.serviceContext?.auditPort ?? { listByActor: listAuditByActor },
       ordersPort: dependencies.serviceContext?.ordersPort ?? {
         getForPayment: getOrderForPayment,
@@ -147,6 +154,12 @@ export function createV1Router(dependencies = {}) {
       },
       customersReviewsPort: dependencies.serviceContext?.customersReviewsPort ?? {
         listByCustomer: listCustomerReviews
+      },
+      historyReviewPort: dependencies.serviceContext?.historyReviewPort ?? {
+        read: getOrderReview
+      },
+      publicTrackingReviewPort: dependencies.serviceContext?.publicTrackingReviewPort ?? {
+        read: getOrderReview
       },
       deliveryPort: dependencies.serviceContext?.deliveryPort ?? {
         confirmReceipt: confirmDeliveryReceipt
@@ -186,6 +199,17 @@ export function createV1Router(dependencies = {}) {
       )
     )
   );
+  // Public routers FIRST: any router mounted after a bare `use(employeeAuth)`
+  // wall would otherwise 401 every public route behind it. Routers here must
+  // never contain a bare employeeAuth use() — only route-level public guards.
+  router.use(createCustomerExperienceRouter(runtimeDependencies));
+  router.use(createTableGuestRouter(runtimeDependencies));
+  router.use(createTableServiceGuestRouter(runtimeDependencies));
+  router.use(createCustomerAiRouter(runtimeDependencies));
+  router.use(createRealtimeRouter(runtimeDependencies));
+  router.use(createPublicReviewRouter(runtimeDependencies));
+  router.use(createPublicMediaRouter(runtimeDependencies));
+  // Private routers below (each guards itself with employeeAuth).
   router.use(createEmployeeRouter(runtimeDependencies));
   router.use(createAttendanceRouter(runtimeDependencies));
   router.use(createSupplierRouter(runtimeDependencies));
@@ -195,21 +219,16 @@ export function createV1Router(dependencies = {}) {
   router.use(createPurchaseRouter(runtimeDependencies));
   router.use(createPurchaseReturnRouter(runtimeDependencies));
   router.use(createDrawerRouter(runtimeDependencies));
-  router.use(createTableGuestRouter(runtimeDependencies));
   router.use(createTableProposalRouter(runtimeDependencies));
-  router.use(createTableServiceGuestRouter(runtimeDependencies));
   router.use(createTableServiceAdminRouter(runtimeDependencies));
   router.use(createOrderCasesRouter(runtimeDependencies));
   router.use(createMediaRouter(runtimeDependencies));
-  router.use(createCustomerAiRouter(runtimeDependencies));
   router.use(createDashboardRouter(runtimeDependencies));
   router.use(createReportsRouter(runtimeDependencies));
   router.use(createAuditRouter(runtimeDependencies));
   router.use(createNotificationsRouter(runtimeDependencies));
-  router.use(createRealtimeRouter(runtimeDependencies));
   router.use(createTablesRouter(runtimeDependencies));
   router.use(createDeliveryRouter(runtimeDependencies));
-  router.use(createCustomerExperienceRouter(runtimeDependencies));
   router.use(createCustomerRouter(runtimeDependencies));
   router.use(createReviewRouter(runtimeDependencies));
   router.use(createPreparationRouter(runtimeDependencies));

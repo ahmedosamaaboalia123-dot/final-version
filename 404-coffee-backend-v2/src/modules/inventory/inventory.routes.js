@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { employeeAuth } from '../../platform/auth/employee-auth.middleware.js';
 import { requirePermission } from '../../platform/auth/permission.middleware.js';
 import { asyncHandler } from '../../platform/http/async-handler.js';
+import { idempotentAsyncHandler } from '../../platform/http/idempotent-handler.js';
 import { validate } from '../../platform/http/validate.middleware.js';
 import { AUTH_PERMISSIONS } from '../../shared/constants/auth.constants.js';
 import { createInventoryController } from './inventory.controller.js';
@@ -37,7 +38,7 @@ export function createInventoryRouter(dependencies) {
     '/raw-materials',
     requirePermission(AUTH_PERMISSIONS.INVENTORY_MANAGE),
     validate({ body: createMaterialBody }),
-    asyncHandler(controller.createMaterial)
+    idempotentAsyncHandler('inventory.material', controller.createMaterial)
   );
   router.get(
     '/raw-materials/:id',
@@ -51,12 +52,12 @@ export function createInventoryRouter(dependencies) {
     validate({ params: idParams, body: updateMaterialBody }),
     asyncHandler(controller.updateMaterial)
   );
-  router.delete('/raw-materials/:id', requirePermission(AUTH_PERMISSIONS.INVENTORY_MANAGE), validate({ params: idParams, body: deleteMaterialBody }), asyncHandler(controller.deleteMaterial));
+  router.delete('/raw-materials/:id', requirePermission(AUTH_PERMISSIONS.INVENTORY_MANAGE), validate({ params: idParams, body: deleteMaterialBody }), idempotentAsyncHandler('inventory.material-delete', controller.deleteMaterial));
   router.post(
     '/raw-materials/:id/withdrawals',
     requirePermission(AUTH_PERMISSIONS.INVENTORY_WITHDRAW),
     validate({ params: idParams, body: withdrawalBody }),
-    asyncHandler(controller.withdraw)
+    idempotentAsyncHandler('inventory.withdraw', controller.withdraw)
   );
   router.put(
     '/raw-materials/:id/batch-priorities',

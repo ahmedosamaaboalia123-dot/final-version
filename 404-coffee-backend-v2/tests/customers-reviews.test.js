@@ -12,6 +12,10 @@ import {
   submitOrderReview,
   updateOrderReview
 } from '../src/modules/reviews/review.service.js';
+import { reviewDto } from '../src/modules/reviews/review.mapper.js';
+import { customerDto } from '../src/modules/customers/customer.mapper.js';
+import { publicReviewBody } from '../src/modules/customer-experience/customer-experience.validation.js';
+import { guestReviewBody } from '../src/modules/table-experience/table-experience.validation.js';
 import { confirmNewOrder } from '../src/modules/orders/order.service.js';
 import { toDecimal128 } from '../src/platform/database/decimal.js';
 
@@ -81,6 +85,48 @@ describe('customers upsert and reviews', () => {
     expect(String(second._id)).toBe(String(same._id));
     expect(second.orderCount).toBe(2);
     expect(second.name).toBe('اسم جديد');
+  });
+  it('publishes repeated orders for the same customer with independent event sequences', async () => {
+    const customer = customerDoc({
+      phoneNormalized: '+201001234567',
+      lastProfileOrderAt: new Date('2026-09-10T10:00:00Z')
+    });
+    const sequences = new Map();
+    const published = [];
+    const context = {
+      ...infrastructure(),
+      customerModels: { Customer: { findOne: () => chain(customer) } },
+      sequenceModel: {
+        findOneAndUpdate: async ({ _id }) => {
+          const value = (sequences.get(_id) ?? 0) + 1;
+          sequences.set(_id, value);
+          return { value };
+        }
+      },
+      outboxModel: {
+        create: async ([event]) => {
+          const key = `${event.aggregateType}:${event.aggregateId}:${event.sequence}`;
+          if (published.some((entry) => entry.key === key))
+            throw Object.assign(new Error('duplicate'), { code: 11000 });
+          published.push({ key, event });
+          return [event];
+        }
+      }
+    };
+    await upsertCustomerForOrder(
+      { name: 'عميل متكرر', phone: '01001234567' },
+      { orderTotal: '20', orderCreatedAt: new Date('2026-09-11T10:00:00Z') },
+      context
+    );
+    await upsertCustomerForOrder(
+      { name: 'عميل متكرر', phone: '01001234567' },
+      { orderTotal: '30', orderCreatedAt: new Date('2026-09-12T10:00:00Z') },
+      context
+    );
+    expect(published.map(({ event }) => ({ type: event.aggregateType, sequence: event.sequence }))).toEqual([
+      { type: 'CustomerProfile', sequence: 1 },
+      { type: 'CustomerProfile', sequence: 2 }
+    ]);
   });
   it('keeps the newer profile when an older order arrives late', async () => {
     const same = customerDoc({
@@ -193,6 +239,40 @@ describe('customers upsert and reviews', () => {
         { ...infrastructure(), reviewModels: duplicate }
       )
     ).rejects.toMatchObject({ code: 'REVIEW_ALREADY_EXISTS' });
+  });
+  it('stores the reviewer display name with the review', async () => {
+    const order = completedOrder();
+    let stored;
+    const models = {
+      Order: { findById: () => chain(order) },
+      OrderReview: { create: async ([v]) => { stored = v; return [{ _id: id(), version: 0, ...v }]; } },
+      OrderReviewRevision: { create: vi.fn() }
+    };
+    const review = await submitOrderReview(
+      order._id,
+      { rating: 4, comment: 'جميل', displayName: 'كريم', expectedOrderVersion: 0 },
+      { ...infrastructure(), reviewModels: models }
+    );
+    expect(review.displayName).toBe('كريم');
+    expect(stored.displayName).toBe('كريم');
+    expect(reviewDto(review).displayName).toBe('كريم');
+  });
+  it('accepts an optional reviewer display name on public and guest bodies', async () => {
+    expect(
+      publicReviewBody.safeParse({ rating: 5, displayName: 'كريم', expectedOrderVersion: 0 }).success
+    ).toBe(true);
+    expect(
+      guestReviewBody.safeParse({ rating: 5, displayName: 'كريم', expectedOrderVersion: 0 }).success
+    ).toBe(true);
+    expect(
+      publicReviewBody.safeParse({ rating: 5, displayName: '', expectedOrderVersion: 0 }).success
+    ).toBe(false);
+  });
+  it('exposes social links on the customer dto for prefill', () => {
+    expect(
+      customerDto({ _id: id(), socialLinks: ['https://wa.me/1'], lifetimeValue: '0' }).socialLinks
+    ).toEqual(['https://wa.me/1']);
+    expect(customerDto({ _id: id(), lifetimeValue: '0' }).socialLinks).toEqual([]);
   });
   it('edits preserve the original rating in an immutable revision', async () => {
     const review = {

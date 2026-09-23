@@ -4,6 +4,7 @@ import { runInTransaction } from '../../platform/database/transaction.js';
 import { writeAudit } from '../../platform/audit/audit-writer.js';
 import { enqueueDomainEvent } from '../../platform/events/outbox-writer.js';
 import { ApiError } from '../../platform/http/api-error.js';
+import { OutboxEvent } from '../../platform/events/outbox-event.model.js';
 import { Order, OrderStatusEvent } from '../orders/order.models.js';
 import {
   appendOrderItems,
@@ -18,6 +19,17 @@ const defaults = { Table, TableSession };
 const orderDefaults = { Order, OrderStatusEvent };
 const ZERO = '0';
 const TABLE_COUNT = 20;
+
+async function nextSessionSequence(session, context, tx) {
+  const model = context.outboxModel ?? OutboxEvent;
+  const last = await model
+    .find({ aggregateType: 'TableSession', aggregateId: String(session._id) })
+    .sort({ sequence: -1 })
+    .limit(1)
+    .session(tx.session)
+    .lean();
+  return Math.max(session.eventSequence ?? 0, last[0]?.sequence ?? 0) + 1;
+}
 
 async function record(kind, sessionId, payload, context) {
   await writeAudit(
@@ -46,7 +58,6 @@ async function record(kind, sessionId, payload, context) {
     context
   );
 }
-
 export async function ensureDefaultTables(context = {}) {
   const models = context.tablesModels ?? defaults;
   const existing = await models.Table.find({}).select({ tableNumber: 1 }).lean();
@@ -154,6 +165,7 @@ export async function openTableOrder(tableId, input, context = {}) {
         throw error;
       }
       session.activeOrderId = confirmed.order._id;
+      session.eventSequence = await nextSessionSequence(session, { ...context, ...tx }, tx);
       await session.save({ session: tx.session });
       await record(
         'table-session.opened',
@@ -161,7 +173,8 @@ export async function openTableOrder(tableId, input, context = {}) {
         {
           sessionId: String(session._id),
           tableNumber: table.tableNumber,
-          orderId: String(confirmed.order._id)
+          orderId: String(confirmed.order._id),
+          sequence: session.eventSequence
         },
         { ...context, ...tx }
       );
@@ -199,10 +212,16 @@ export async function addSessionItems(sessionId, input, context = {}) {
         { items: input.items, expectedVersion: input.expectedOrderVersion },
         { ...context, ...tx }
       );
+      session.eventSequence = await nextSessionSequence(session, { ...context, ...tx }, tx);
+      await session.save({ session: tx.session });
       await record(
         'table-session.items-added',
         session._id,
-        { sessionId: String(session._id), orderId: String(session.activeOrderId) },
+        {
+          sessionId: String(session._id),
+          orderId: String(session.activeOrderId),
+          sequence: session.eventSequence
+        },
         { ...context, ...tx }
       );
       return { session, ...result };
@@ -239,13 +258,14 @@ export async function cancelTableSession(sessionId, input, context = {}) {
       session.cancelReason = input.reason;
       session.closedAt = context.now ?? new Date();
       session.closedBy = context.actorId;
+      session.eventSequence = await nextSessionSequence(session, { ...context, ...tx }, tx);
       await session.save({ session: tx.session });
       const closeServices = context.tableServicesPort?.closeSessionServices;
       if (closeServices) await closeServices(session._id, { ...context, ...tx });
       await record(
         'table-session.cancelled',
         session._id,
-        { sessionId: String(session._id) },
+        { sessionId: String(session._id), sequence: session.eventSequence },
         { ...context, ...tx }
       );
       return { session, order: cancelled.order };
@@ -305,29 +325,31 @@ export async function closeTableSession(sessionId, input, context = {}) {
         payment = collected.payment;
         drawerTransaction = collected.drawerTransaction;
       }
+      const current = await orderModels.Order.findById(order._id).session(tx.session);
       const finalize = context.tablesInvoicesPort?.finalize ?? finalizeInvoice;
       const { invoice } = await finalize(order._id, { ...context, ...tx });
-      order.eventSequence += 1;
+      current.eventSequence += 1;
       await orderModels.OrderStatusEvent.create(
         [
           {
-            orderId: order._id,
+            orderId: current._id,
             fromStatus: 'READY',
             toStatus: 'COMPLETED',
             reasonCode: 'TABLE_SESSION_CLOSED',
             actorType: context.actorType,
             actorId: context.actorId,
-            sequence: order.eventSequence,
+            sequence: current.eventSequence,
             requestId: context.requestId
           }
         ],
         { session: tx.session }
       );
-      order.status = 'COMPLETED';
-      await order.save({ session: tx.session });
+      current.status = 'COMPLETED';
+      await current.save({ session: tx.session });
       session.status = 'CLOSED';
       session.closedAt = context.now ?? new Date();
       session.closedBy = context.actorId;
+      session.eventSequence = await nextSessionSequence(session, { ...context, ...tx }, tx);
       await session.save({ session: tx.session });
       const table = await models.Table.findById(session.tableId).session(tx.session);
       const closeServices = context.tableServicesPort?.closeSessionServices;
@@ -338,11 +360,12 @@ export async function closeTableSession(sessionId, input, context = {}) {
         {
           sessionId: String(session._id),
           tableNumber: session.tableNumber,
-          orderId: String(order._id)
+          orderId: String(order._id),
+          sequence: session.eventSequence
         },
         { ...context, ...tx }
       );
-      return { table, session, order, payment, drawerTransaction, invoice };
+      return { table, session, order: current, payment, drawerTransaction, invoice };
     },
     context,
     context.transactionOptions

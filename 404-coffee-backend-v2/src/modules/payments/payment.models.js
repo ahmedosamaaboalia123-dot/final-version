@@ -28,6 +28,7 @@ const paymentSchema = new mongoose.Schema(
 paymentSchema.index({ orderId: 1, paymentNo: 1 }, { unique: true });
 paymentSchema.index({ cashDrawerTransactionId: 1 }, { unique: true, sparse: true });
 paymentSchema.index({ collectionMode: 1, status: 1, collectedAt: -1, _id: -1 });
+paymentSchema.index({ operationRequestId: 1 }, { unique: true, sparse: true });
 
 const refundSchema = new mongoose.Schema(
   {

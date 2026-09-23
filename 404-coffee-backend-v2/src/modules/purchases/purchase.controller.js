@@ -15,7 +15,11 @@ import {
   updatePurchaseGroup
 } from './purchase.service.js';
 import { invoiceDto, splitPurchaseGroupBySupplier } from './purchase-split.service.js';
-const ctx = (req, d) => ({ ...req.auth, ...d.serviceContext });
+const ctx = (req, d) => ({
+  ...req.auth,
+  ...d.serviceContext,
+  operationRequestId: req.operationRequestId
+});
 const response = (x) => ({
   group: groupDto(x.group),
   items: x.items.map(itemDto),

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { employeeAuth } from '../../platform/auth/employee-auth.middleware.js';
 import { requirePermission } from '../../platform/auth/permission.middleware.js';
 import { asyncHandler } from '../../platform/http/async-handler.js';
+import { idempotentAsyncHandler } from '../../platform/http/idempotent-handler.js';
 import { validate } from '../../platform/http/validate.middleware.js';
 import { AUTH_PERMISSIONS } from '../../shared/constants/auth.constants.js';
 import { createGuestGuards } from './table-experience.middleware.js';
@@ -33,20 +34,20 @@ export function createTableGuestRouter(d) {
     '/table-experience/order-proposals',
     validate({ body: proposalBody }),
     guards.guest,
-    asyncHandler(c.propose)
+    idempotentAsyncHandler('table-experience.propose', c.propose, { publicActor: true })
   );
   r.get('/table-experience/order-proposals/current', guards.guest, asyncHandler(c.current));
   r.post(
     '/table-experience/order-proposals/cancel',
     validate({ body: emptyBody }),
     guards.guest,
-    asyncHandler(c.cancel)
+    idempotentAsyncHandler('table-experience.cancel', c.cancel, { publicActor: true })
   );
   r.post(
     '/table-experience/orders/:id/reviews',
     validate({ params: idParams, body: guestReviewBody }),
     guards.guest,
-    asyncHandler(c.review)
+    idempotentAsyncHandler('table-experience.review', c.review, { publicActor: true })
   );
   return r;
 }
@@ -71,25 +72,25 @@ export function createTableProposalRouter(d) {
     '/table-order-proposals/:id/start-review',
     requirePermission(AUTH_PERMISSIONS.TABLE_PROPOSALS_REVIEW),
     validate({ params: idParams, body: reviewChangeBody }),
-    asyncHandler(c.startReview)
+    idempotentAsyncHandler('table-proposals.start-review', c.startReview)
   );
   r.post(
     '/table-order-proposals/:id/request-changes',
     requirePermission(AUTH_PERMISSIONS.TABLE_PROPOSALS_REVIEW),
     validate({ params: idParams, body: reviewChangeBody }),
-    asyncHandler(c.requestChanges)
+    idempotentAsyncHandler('table-proposals.request-changes', c.requestChanges)
   );
   r.post(
     '/table-order-proposals/:id/reject',
     requirePermission(AUTH_PERMISSIONS.TABLE_PROPOSALS_REVIEW),
     validate({ params: idParams, body: reviewChangeBody }),
-    asyncHandler(c.reject)
+    idempotentAsyncHandler('table-proposals.reject', c.reject)
   );
   r.post(
     '/table-order-proposals/:id/confirm',
     requirePermission(AUTH_PERMISSIONS.TABLE_PROPOSALS_REVIEW),
     validate({ params: idParams, body: confirmProposalBody }),
-    asyncHandler(c.confirm)
+    idempotentAsyncHandler('table-proposals.confirm', c.confirm)
   );
   return r;
 }
